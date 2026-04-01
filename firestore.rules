@@ -1,0 +1,184 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: userId (Auth UID)
+    // Fields:
+    //   - uid: string (required) - Auth UID
+    //   - email: string (required, email format) - User's email
+    //   - displayName: string (required, 1-100 chars) - Full name
+    //   - role: string (required, enum: admin, professor, staff) - User role
+    //   - schoolId: string (required) - ID of the school
+    //   - workload: number (required, positive) - Monthly hours
+    //   - startTime: string (required, HH:mm format) - Shift start
+    //   - endTime: string (required, HH:mm format) - Shift end
+    //   - createdAt: string (required, ISO 8601) - Creation timestamp
+    //   - permissions: map (optional) - Access permissions
+    //
+    // Collection: timeLogs
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - ID of the user
+    //   - userName: string (required) - Name of the user
+    //   - schoolId: string (required) - ID of the school
+    //   - type: string (required, enum: in, out) - Entry or Exit
+    //   - timestamp: string (required, ISO 8601) - Log timestamp
+    //   - device: string (required) - Mobile or Desktop
+    //   - location: map (optional) - GPS coordinates
+    //   - edited: bool (optional) - If edited by admin
+    //   - editedBy: string (optional) - Admin UID who edited
+    //   - originalTimestamp: string (optional) - Original time before edit
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.token.email == "profviniciusmcarvalho@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isSameSchool(schoolId) {
+      return isAuthenticated() && 
+        (request.auth.token.email == "profviniciusmcarvalho@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.schoolId == schoolId));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    function isValidDateString(dateStr) {
+      return dateStr is string && dateStr.matches("^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}.*Z?$");
+    }
+
+    function isRecent(timestampStr) {
+      return isValidDateString(timestampStr) && 
+             timestamp(timestampStr) > request.time - duration.value(5, 'm');
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidLockout(data) {
+      return data.keys().hasAll(['email', 'failedAttempts', 'lastAttempt']) &&
+             data.email is string &&
+             data.failedAttempts is number &&
+             isValidDateString(data.lastAttempt) &&
+             (!('lockedUntil' in data) || isValidDateString(data.lockedUntil));
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'displayName', 'role', 'schoolId', 'workload', 'createdAt', 'startTime', 'endTime']) &&
+             data.uid is string && data.uid.size() > 0 &&
+             data.email is string && isValidEmail(data.email) &&
+             data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
+             data.role in ['admin', 'professor', 'staff'] &&
+             data.schoolId is string && data.schoolId.size() > 0 &&
+             data.workload is number && data.workload > 0 &&
+             data.startTime is string && data.startTime.matches("^\\d{2}:\\d{2}$") &&
+             data.endTime is string && data.endTime.matches("^\\d{2}:\\d{2}$") &&
+             isValidDateString(data.createdAt) &&
+             (!('permissions' in data) || (
+               data.permissions is map &&
+               data.permissions.keys().hasAll(['viewLogs', 'editLogs', 'manageUsers', 'viewReports', 'exportReports']) &&
+               data.permissions.viewLogs is bool &&
+               data.permissions.editLogs is bool &&
+               data.permissions.manageUsers is bool &&
+               data.permissions.viewReports is bool &&
+               data.permissions.exportReports is bool
+             )) &&
+             (!('fcmTokens' in data) || data.fcmTokens is list);
+    }
+
+    function isValidTimeLog(data) {
+      return data.keys().hasAll(['userId', 'userName', 'schoolId', 'type', 'timestamp', 'device']) &&
+             data.userId is string && data.userId.size() > 0 &&
+             data.userName is string && data.userName.size() > 0 &&
+             data.schoolId is string && data.schoolId.size() > 0 &&
+             data.type in ['in', 'out'] &&
+             isValidDateString(data.timestamp) &&
+             data.device in ['Mobile', 'Desktop'];
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      // Users can read their own profile. Admins can read any profile.
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      
+      // Only admins can create users, or the bootstrap admin
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.auth.token.email == "profviniciusmcarvalho@gmail.com" || isAdmin());
+      
+      // Users can update their own profile (except role/permissions), admins can update everything
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && (
+        isAdmin() || 
+        (request.auth.uid == userId && 
+         request.resource.data.role == resource.data.role && 
+         request.resource.data.permissions == resource.data.permissions &&
+         request.resource.data.schoolId == resource.data.schoolId)
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    function uidNotModified() {
+      return request.resource.data.uid == resource.data.uid &&
+             request.resource.data.email == resource.data.email;
+    }
+
+    match /timeLogs/{logId} {
+      // Users can read their own logs. Admins can read all logs in their school.
+      allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || (isAdmin() && isSameSchool(resource.data.schoolId)));
+      
+      // Users can create their own logs.
+      allow create: if isAuthenticated() && 
+                      request.resource.data.userId == request.auth.uid && 
+                      isValidTimeLog(request.resource.data) &&
+                      isSameSchool(request.resource.data.schoolId);
+      
+      // Only admins can update logs (for manual edits).
+      allow update: if isAdmin() && 
+                      isValidTimeLog(request.resource.data) &&
+                      isSameSchool(resource.data.schoolId) &&
+                      request.resource.data.userId == resource.data.userId;
+      
+      allow delete: if isAdmin();
+    }
+
+    match /schools/{schoolId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /lockouts/{email} {
+      // Allow checking lockout status
+      allow get: if true;
+      
+      // Allow updating lockout status on failure
+      // We use a simple rule here, but in production this should be more restricted
+      allow create, update: if isValidLockout(request.resource.data);
+    }
+  }
+}
