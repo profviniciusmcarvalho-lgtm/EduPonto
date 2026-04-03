@@ -10,7 +10,8 @@ import { TimeClock } from '@/src/pages/TimeClock';
 import { UserLogs } from '@/src/pages/UserLogs';
 import { AdminUsers } from '@/src/pages/AdminUsers';
 import { AdminReports } from '@/src/pages/AdminReports';
-import { BrandIdentity } from '@/src/pages/BrandIdentity';
+import { AdminSchools } from '@/src/pages/AdminSchools';
+import { AdminSchedules } from '@/src/pages/AdminSchedules';
 import { Unauthorized } from '@/src/pages/Unauthorized';
 import ErrorBoundary from '@/src/components/ErrorBoundary';
 
@@ -63,11 +64,19 @@ export default function App() {
                 </Layout>
               </ProtectedRoute>
             } />
-            
-            <Route path="/identidade" element={
+
+            <Route path="/escolas" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
-                  <BrandIdentity />
+                  <AdminSchools />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/quadros" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminSchedules />
                 </Layout>
               </ProtectedRoute>
             } />

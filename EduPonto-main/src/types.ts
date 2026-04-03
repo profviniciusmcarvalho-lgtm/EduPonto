@@ -20,6 +20,7 @@ export interface UserProfile {
   createdAt: string;
   permissions?: UserPermissions;
   fcmTokens?: string[];
+  scheduleId?: string;
 }
 
 export interface TimeLog {
@@ -43,6 +44,24 @@ export interface School {
   id: string;
   name: string;
   address: string;
-  defaultStartTime?: string; // e.g., "08:00"
-  defaultEndTime?: string; // e.g., "17:00"
+  city?: string;
+  state?: string;
+  phone?: string;
+  cnpj?: string;
+  defaultStartTime?: string;
+  defaultEndTime?: string;
+  createdAt?: string;
+}
+
+export interface Schedule {
+  id?: string;
+  name: string;
+  schoolId: string;
+  workDays: string[];
+  startTime: string;
+  endTime: string;
+  lunchStart?: string;
+  lunchEnd?: string;
+  workload: number;
+  createdAt: string;
 }

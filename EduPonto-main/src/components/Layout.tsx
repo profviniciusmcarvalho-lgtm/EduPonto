@@ -9,12 +9,13 @@ import {
   LogOut, 
   Menu, 
   X,
-  Palette,
   Bell,
   BellOff,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  Building2,
+  CalendarDays
 } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useNotifications } from '@/src/hooks/useNotifications';
@@ -47,7 +48,8 @@ export function Layout({ children }: LayoutProps) {
     { label: 'Meus Registros', icon: FileText, path: '/meus-registros', roles: ['admin', 'professor', 'staff'] },
     { label: 'Gestão de Usuários', icon: Users, path: '/usuarios', roles: ['admin'], permission: 'manageUsers' },
     { label: 'Relatórios Escolares', icon: FileText, path: '/relatorios', roles: ['admin'], permission: 'viewReports' },
-    { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
+    { label: 'Cadastro de Escolas', icon: Building2, path: '/escolas', roles: ['admin'] },
+    { label: 'Quadros de Horário', icon: CalendarDays, path: '/quadros', roles: ['admin'] },
   ];
 
   const filteredNavItems = navItems.filter(item => {

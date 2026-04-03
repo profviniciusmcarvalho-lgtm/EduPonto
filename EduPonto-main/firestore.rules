@@ -172,6 +172,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    match /schedules/{scheduleId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
     match /lockouts/{email} {
       // Allow checking lockout status
       allow get: if true;

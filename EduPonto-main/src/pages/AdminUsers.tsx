@@ -25,6 +25,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { Badge } from '@/src/components/ui/Badge';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
+import { Schedule } from '@/src/types';
 
 export function AdminUsers() {
   const { profile: adminProfile } = useAuth();
@@ -35,6 +36,7 @@ export function AdminUsers() {
   const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
   const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'grid' | 'table'>('table');
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -51,8 +53,21 @@ export function AdminUsers() {
       manageUsers: false,
       viewReports: false,
       exportReports: false
-    } as UserPermissions
+    } as UserPermissions,
+    scheduleId: ''
   });
+
+  useEffect(() => {
+    if (!adminProfile) return;
+    const qSchedules = query(
+      collection(db, 'schedules'),
+      where('schoolId', '==', adminProfile.schoolId)
+    );
+    const unsubSchedules = onSnapshot(qSchedules, (snap) => {
+      setSchedules(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Schedule)));
+    });
+    return () => unsubSchedules();
+  }, [adminProfile]);
 
   useEffect(() => {
     if (!adminProfile) return;
@@ -91,7 +106,8 @@ export function AdminUsers() {
           workload: Number(formData.workload),
           startTime: formData.startTime,
           endTime: formData.endTime,
-          permissions: formData.permissions
+          permissions: formData.permissions,
+          scheduleId: formData.scheduleId || ''
         });
       } else {
         // Create new user in Auth using secondary app
@@ -118,19 +134,19 @@ export function AdminUsers() {
             startTime: formData.startTime,
             endTime: formData.endTime,
             createdAt: new Date().toISOString(),
-            permissions: formData.permissions
+            permissions: formData.permissions,
+            ...(formData.scheduleId ? { scheduleId: formData.scheduleId } : {})
           };
           
           await setDoc(doc(db, 'users', uid), newUser);
-          
-          // Sign out from secondary app (important!)
           await signOut(secondaryAuth);
-        } finally {
-          // Clean up secondary app
           await deleteApp(secondaryApp);
+        } catch (innerError) {
+          try { await signOut(secondaryAuth); } catch (_) {}
+          try { await deleteApp(secondaryApp); } catch (_) {}
+          throw innerError;
         }
       }
-      
       setIsModalOpen(false);
       resetForm();
     } catch (error) {
@@ -186,7 +202,8 @@ export function AdminUsers() {
         manageUsers: false,
         viewReports: false,
         exportReports: false
-      }
+      },
+      scheduleId: user.scheduleId || ''
     });
     setIsModalOpen(true);
   };
@@ -460,6 +477,52 @@ export function AdminUsers() {
                     />
                   </div>
                 </div>
+
+                {schedules.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Quadro de Horário</label>
+                    <select
+                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      value={formData.scheduleId}
+                      onChange={(e) => {
+                        const sel = schedules.find(s => s.id === e.target.value);
+                        setFormData({
+                          ...formData,
+                          scheduleId: e.target.value,
+                          ...(sel ? { startTime: sel.startTime, endTime: sel.endTime, workload: sel.workload } : {})
+                        });
+                      }}
+                    >
+                      <option value="">(Nenhum)</option>
+                      {schedules.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {schedules.length > 0 && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Quadro de Horário</label>
+                    <select
+                      className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                      value={formData.scheduleId}
+                      onChange={(e) => {
+                        const sel = schedules.find(s => s.id === e.target.value);
+                        setFormData({
+                          ...formData,
+                          scheduleId: e.target.value,
+                          ...(sel ? { startTime: sel.startTime, endTime: sel.endTime, workload: sel.workload } : {})
+                        });
+                      }}
+                    >
+                      <option value="">(Nenhum)</option>
+                      {schedules.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
