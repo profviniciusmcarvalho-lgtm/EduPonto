@@ -1,0 +1,5 @@
+{
+  "name": "EduPonto - Controle de Ponto Escolar",
+  "description": "Sistema completo de controle de ponto eletrônico para professores e funcionários administrativos de escolas.",
+  "requestFramePermissions": ["geolocation"]
+}
