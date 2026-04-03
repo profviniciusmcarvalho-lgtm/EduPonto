@@ -1,0 +1,95 @@
+{
+  "entities": {
+    "users": {
+      "title": "User Profile",
+      "description": "Stores user profile information and roles.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Unique user ID from Firebase Auth." },
+        "email": { "type": "string", "format": "email", "description": "User's email address." },
+        "displayName": { "type": "string", "description": "User's full name." },
+        "role": { "type": "string", "enum": ["admin", "professor", "staff"], "description": "User's role in the system." },
+        "schoolId": { "type": "string", "description": "ID of the school the user belongs to." },
+        "workload": { "type": "number", "description": "Monthly workload in hours." },
+        "startTime": { "type": "string", "description": "Scheduled start time (HH:MM)." },
+        "endTime": { "type": "string", "description": "Scheduled end time (HH:MM)." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Account creation timestamp." },
+        "permissions": {
+          "type": "object",
+          "properties": {
+            "viewLogs": { "type": "boolean" },
+            "editLogs": { "type": "boolean" },
+            "manageUsers": { "type": "boolean" },
+            "viewReports": { "type": "boolean" }
+          }
+        }
+      },
+      "required": ["uid", "email", "displayName", "role", "schoolId", "workload", "createdAt", "startTime", "endTime"]
+    },
+    "timeLogs": {
+      "title": "Time Log",
+      "description": "Stores individual punch in/out records.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "description": "ID of the user who made the log." },
+        "userName": { "type": "string", "description": "Name of the user at the time of log." },
+        "schoolId": { "type": "string", "description": "ID of the school." },
+        "type": { "type": "string", "enum": ["in", "out"], "description": "Type of log: entry or exit." },
+        "timestamp": { "type": "string", "format": "date-time", "description": "Timestamp of the log." },
+        "device": { "type": "string", "description": "Device type (Mobile/Desktop)." },
+        "location": {
+          "type": "object",
+          "properties": {
+            "latitude": { "type": "number" },
+            "longitude": { "type": "number" }
+          }
+        },
+        "edited": { "type": "boolean", "description": "Whether the log was manually edited." },
+        "editedBy": { "type": "string", "description": "ID of the admin who edited the log." },
+        "originalTimestamp": { "type": "string", "format": "date-time", "description": "Original timestamp before edit." }
+      },
+      "required": ["userId", "userName", "schoolId", "type", "timestamp", "device"]
+    },
+    "schools": {
+      "title": "School",
+      "description": "Stores school information for multi-tenant support.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "address": { "type": "string" }
+      },
+      "required": ["id", "name", "address"]
+    },
+    "lockouts": {
+      "title": "Account Lockout",
+      "description": "Tracks failed login attempts to prevent brute-force attacks.",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "failedAttempts": { "type": "number" },
+        "lockedUntil": { "type": "string", "format": "date-time" },
+        "lastAttempt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "failedAttempts", "lastAttempt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "users",
+      "description": "User profile documents."
+    },
+    "/timeLogs/{logId}": {
+      "schema": "timeLogs",
+      "description": "Time log records."
+    },
+    "/schools/{schoolId}": {
+      "schema": "schools",
+      "description": "School information."
+    },
+    "/lockouts/{email}": {
+      "schema": "lockouts",
+      "description": "Account lockout tracking."
+    }
+  }
+}
