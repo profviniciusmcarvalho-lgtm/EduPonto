@@ -11,7 +11,9 @@ import {
   ArrowLeft,
   PartyPopper,
   X,
-  CloudRain
+  CloudRain,
+  ShieldCheck,
+  ShieldAlert,
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { 
@@ -22,6 +24,8 @@ import {
   orderBy, 
   limit, 
   onSnapshot,
+  doc,
+  getDoc,
   Timestamp
 } from 'firebase/firestore';
 import { format } from 'date-fns';
@@ -30,11 +34,26 @@ import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Button } from '@/src/components/ui/Button';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
-import { TimeLog } from '@/src/types';
+import { TimeLog, School } from '@/src/types';
 import { cn } from '@/src/lib/utils';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 import { MASCOT_STICKER_URL } from '@/src/constants';
 import { Logo } from '@/src/components/Logo';
+
+/** Haversine formula — returns distance in metres between two GPS points */
+function haversineDistance(
+  lat1: number, lon1: number,
+  lat2: number, lon2: number,
+): number {
+  const R = 6371000;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
 
 export function TimeClock() {
   const { profile } = useAuth();
@@ -43,11 +62,22 @@ export function TimeClock() {
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState<{ type: 'success' | 'error', message: string } | null>(null);
   const [location, setLocation] = useState<{ latitude: number, longitude: number } | null>(null);
+  const [school, setSchool] = useState<School | null>(null);
+  const [geoStatus, setGeoStatus] = useState<'unknown' | 'inside' | 'outside'>('unknown');
+  const [geoDistance, setGeoDistance] = useState<number | null>(null);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Load school geolocation config
+  useEffect(() => {
+    if (!profile?.schoolId) return;
+    getDoc(doc(db, 'schools', profile.schoolId)).then((snap) => {
+      if (snap.exists()) setSchool({ id: snap.id, ...snap.data() } as School);
+    }).catch(() => {});
+  }, [profile?.schoolId]);
 
   useEffect(() => {
     if (!profile) return;
@@ -76,10 +106,20 @@ export function TimeClock() {
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setLocation({
+          const coords = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude
-          });
+          };
+          setLocation(coords);
+          // Compute geofence status
+          if (school?.location) {
+            const dist = haversineDistance(
+              coords.latitude, coords.longitude,
+              school.location.latitude, school.location.longitude,
+            );
+            setGeoDistance(Math.round(dist));
+            setGeoStatus(dist <= (school.geoRadius ?? 500) ? 'inside' : 'outside');
+          }
         },
         (error) => {
           console.warn("Location error:", error);
@@ -89,6 +129,17 @@ export function TimeClock() {
 
     return () => unsubscribe();
   }, [profile]);
+
+  // Re-check geofence if school loads after location is already available
+  useEffect(() => {
+    if (!school?.location || !location) return;
+    const dist = haversineDistance(
+      location.latitude, location.longitude,
+      school.location.latitude, school.location.longitude,
+    );
+    setGeoDistance(Math.round(dist));
+    setGeoStatus(dist <= (school.geoRadius ?? 500) ? 'inside' : 'outside');
+  }, [school, location]);
 
   const handlePunch = async (type: 'in' | 'out') => {
     if (!profile) return;
@@ -326,6 +377,26 @@ export function TimeClock() {
                 ) : "Não disponível"}
               </span>
             </div>
+
+            {/* Geofence status */}
+            {school?.location && location && (
+              <div className="flex items-center justify-between text-sm">
+                <div className={cn(
+                  "flex items-center gap-2",
+                  geoStatus === 'inside' ? "text-green-600 dark:text-green-400" : "text-red-500 dark:text-red-400"
+                )}>
+                  {geoStatus === 'inside'
+                    ? <ShieldCheck size={16} />
+                    : <ShieldAlert size={16} />}
+                  <span className="font-medium">
+                    {geoStatus === 'inside' ? 'Dentro do raio da escola' : 'Fora do raio da escola'}
+                  </span>
+                </div>
+                <span className="text-slate-500 dark:text-slate-400 text-xs">
+                  {geoDistance !== null ? `${geoDistance} m / máx ${school.geoRadius ?? 500} m` : ''}
+                </span>
+              </div>
+            )}
             
             <div className="flex items-center justify-between text-sm">
               <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">

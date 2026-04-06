@@ -15,6 +15,7 @@ import { Unauthorized } from '@/src/pages/Unauthorized';
 import { AdminTurmas } from '@/src/pages/AdminTurmas';
 import { AdminDisciplinas } from '@/src/pages/AdminDisciplinas';
 import { AdminQuadroHorarios } from '@/src/pages/AdminQuadroHorarios';
+import { AdminEscolas } from '@/src/pages/AdminEscolas';
 import ErrorBoundary from '@/src/components/ErrorBoundary';
 
 export default function App() {
@@ -99,6 +100,14 @@ export default function App() {
               </ProtectedRoute>
             } />
             
+            <Route path="/escolas" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminEscolas />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

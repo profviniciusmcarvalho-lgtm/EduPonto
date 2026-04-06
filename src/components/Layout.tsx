@@ -18,6 +18,7 @@ import {
   GraduationCap,
   BookOpen,
   CalendarDays,
+  Building2,
 } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useNotifications } from '@/src/hooks/useNotifications';
@@ -53,6 +54,7 @@ export function Layout({ children }: LayoutProps) {
     { label: 'Turmas', icon: GraduationCap, path: '/turmas', roles: ['admin'] },
     { label: 'Disciplinas', icon: BookOpen, path: '/disciplinas', roles: ['admin'] },
     { label: 'Quadro de Horários', icon: CalendarDays, path: '/quadro-horarios', roles: ['admin'] },
+    { label: 'Escolas', icon: Building2, path: '/escolas', roles: ['admin'] },
     { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
   ];
 
