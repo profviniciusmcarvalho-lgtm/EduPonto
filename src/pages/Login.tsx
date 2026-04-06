@@ -91,6 +91,10 @@ export function Login() {
       }
 
       setError('E-mail ou senha incorretos. Tente novamente.');
+      // Special case: Auth not yet enabled in Firebase Console
+      if (err?.code === 'auth/configuration-not-found' || err?.code === 'auth/operation-not-allowed') {
+        setError('⚠️ Firebase Authentication não está ativado neste projeto. Acesse o Firebase Console → Authentication → Ativar Email/Senha.');
+      }
     } finally {
       setLoading(false);
     }
@@ -112,7 +116,11 @@ export function Login() {
       navigate(from, { replace: true });
     } catch (err: any) {
       console.error(err);
-      setError('Erro ao entrar com Google. Tente novamente.');
+      if (err?.code === 'auth/configuration-not-found' || err?.code === 'auth/operation-not-allowed') {
+        setError('⚠️ Firebase Authentication não está ativado neste projeto. Acesse o Firebase Console → Authentication → Ativar Email/Senha.');
+      } else {
+        setError('Erro ao entrar com Google. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
