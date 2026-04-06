@@ -417,53 +417,77 @@ export function AdminUsers() {
       </Card>
 
       {/* Modal User Form */}
+      {/* ── Side Drawer ─────────────────────────────────────────────────────── */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-[100]">
-          <Card className="w-full max-w-md shadow-2xl">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>{editingUser ? 'Editar Usuário' : 'Novo Usuário'}</CardTitle>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300">
-                <X size={24} />
-              </button>
-            </CardHeader>
-            <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nome Completo</label>
-                  <Input 
-                    required 
-                    value={formData.displayName}
-                    onChange={(e) => setFormData({...formData, displayName: e.target.value})}
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">E-mail</label>
-                  <Input 
-                    type="email" 
-                    required 
-                    disabled={!!editingUser}
-                    value={formData.email}
-                    onChange={(e) => setFormData({...formData, email: e.target.value})}
-                  />
-                </div>
+        <div className="fixed inset-0 z-[100] flex">
+          {/* Backdrop */}
+          <div
+            className="flex-1 bg-black/40 backdrop-blur-sm"
+            onClick={() => setIsModalOpen(false)}
+          />
+          {/* Drawer panel */}
+          <div className="w-full max-w-2xl bg-white dark:bg-slate-900 shadow-2xl flex flex-col h-full overflow-hidden animate-in slide-in-from-right duration-300">
 
-                {!editingUser && (
+            {/* Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-700 shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-slate-100">
+                  {editingUser ? 'Editar Usuário' : 'Novo Usuário'}
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  {editingUser ? `Editando ${editingUser.displayName}` : 'Preencha os dados do colaborador'}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 dark:hover:bg-slate-800 dark:hover:text-slate-200 transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Scrollable body */}
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <form onSubmit={handleSubmit} id="user-form" className="space-y-5">
+
+                {/* Row 1: Name + Email */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Senha Inicial</label>
-                    <Input 
-                      type="password" 
-                      required 
-                      value={formData.password}
-                      onChange={(e) => setFormData({...formData, password: e.target.value})}
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Nome Completo</label>
+                    <Input
+                      required
+                      value={formData.displayName}
+                      onChange={(e) => setFormData({...formData, displayName: e.target.value})}
                     />
                   </div>
-                )}
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">E-mail</label>
+                    <Input
+                      type="email"
+                      required
+                      disabled={!!editingUser}
+                      value={formData.email}
+                      onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    />
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Row 2: Password (only new) + Cargo + Carga */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {!editingUser ? (
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Senha Inicial</label>
+                      <Input
+                        type="password"
+                        required
+                        value={formData.password}
+                        onChange={(e) => setFormData({...formData, password: e.target.value})}
+                      />
+                    </div>
+                  ) : <div />}
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Cargo</label>
-                    <select 
+                    <select
                       className="w-full h-10 rounded-md border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
                       value={formData.role}
                       onChange={(e) => setFormData({...formData, role: e.target.value as UserRole})}
@@ -474,31 +498,32 @@ export function AdminUsers() {
                     </select>
                   </div>
                   <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Carga Horária (h)</label>
-                    <Input 
-                      type="number" 
-                      required 
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Carga Horária (h/mês)</label>
+                    <Input
+                      type="number"
+                      required
                       value={formData.workload}
                       onChange={(e) => setFormData({...formData, workload: Number(e.target.value)})}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Row 3: Turno */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Início Turno</label>
-                    <Input 
-                      type="time" 
-                      required 
+                    <Input
+                      type="time"
+                      required
                       value={formData.startTime}
                       onChange={(e) => setFormData({...formData, startTime: e.target.value})}
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Fim Turno</label>
-                    <Input 
-                      type="time" 
-                      required 
+                    <Input
+                      type="time"
+                      required
                       value={formData.endTime}
                       onChange={(e) => setFormData({...formData, endTime: e.target.value})}
                     />
@@ -618,7 +643,7 @@ export function AdminUsers() {
                       <span className="text-xs font-medium text-slate-700 dark:text-slate-300 group-hover:text-blue-700 dark:group-hover:text-blue-400">Exportar Relatórios</span>
                     </label>
                   </div>
-                  
+
                   {formData.role === 'admin' && (
                     <p className="text-[10px] text-blue-600 dark:text-blue-400 font-medium flex items-center gap-1">
                       <CheckCircle2 size={10} />
@@ -627,17 +652,20 @@ export function AdminUsers() {
                   )}
                 </div>
 
-                <div className="pt-4 flex gap-3">
-                  <Button type="button" variant="outline" className="flex-1" onClick={() => setIsModalOpen(false)}>
-                    Cancelar
-                  </Button>
-                  <Button type="submit" className="flex-1">
-                    {editingUser ? 'Salvar Alterações' : 'Criar Usuário'}
-                  </Button>
-                </div>
               </form>
-            </CardContent>
-          </Card>
+            </div>
+
+            {/* Footer */}
+            <div className="px-6 py-4 border-t border-slate-200 dark:border-slate-700 shrink-0 flex gap-3 bg-slate-50 dark:bg-slate-800/50">
+              <Button type="button" variant="outline" className="flex-1" onClick={() => setIsModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" form="user-form" className="flex-1">
+                {editingUser ? 'Salvar Alterações' : 'Criar Usuário'}
+              </Button>
+            </div>
+
+          </div>
         </div>
       )}
     </div>
