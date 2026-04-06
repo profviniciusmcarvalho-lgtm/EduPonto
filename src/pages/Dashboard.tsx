@@ -371,7 +371,6 @@ export function Dashboard() {
                   src={MASCOT_FULL_URL} 
                   alt="Mascote EduPonto" 
                   className="h-32 w-auto object-contain drop-shadow-md"
-                  referrerPolicy="no-referrer"
                 />
               </div>
               <div className="flex-1 space-y-2">

@@ -215,7 +215,6 @@ export function TimeClock() {
                       "h-40 w-40 object-contain drop-shadow-2xl transition-all duration-300",
                       status.type === 'error' && "brightness-75"
                     )}
-                    referrerPolicy="no-referrer"
                   />
                   {status.type === 'error' && (
                     <motion.div 

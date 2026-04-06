@@ -14,7 +14,10 @@ import {
   BellOff,
   Sun,
   Moon,
-  Monitor
+  Monitor,
+  GraduationCap,
+  BookOpen,
+  CalendarDays,
 } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
 import { useNotifications } from '@/src/hooks/useNotifications';
@@ -47,6 +50,9 @@ export function Layout({ children }: LayoutProps) {
     { label: 'Meus Registros', icon: FileText, path: '/meus-registros', roles: ['admin', 'professor', 'staff'] },
     { label: 'Gestão de Usuários', icon: Users, path: '/usuarios', roles: ['admin'], permission: 'manageUsers' },
     { label: 'Relatórios Escolares', icon: FileText, path: '/relatorios', roles: ['admin'], permission: 'viewReports' },
+    { label: 'Turmas', icon: GraduationCap, path: '/turmas', roles: ['admin'] },
+    { label: 'Disciplinas', icon: BookOpen, path: '/disciplinas', roles: ['admin'] },
+    { label: 'Quadro de Horários', icon: CalendarDays, path: '/quadro-horarios', roles: ['admin'] },
     { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
   ];
 

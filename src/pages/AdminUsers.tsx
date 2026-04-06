@@ -45,6 +45,7 @@ export function AdminUsers() {
     workload: 160,
     startTime: '08:00',
     endTime: '17:00',
+    numeroAulas: 20,
     permissions: {
       viewLogs: false,
       editLogs: false,
@@ -91,6 +92,7 @@ export function AdminUsers() {
           workload: Number(formData.workload),
           startTime: formData.startTime,
           endTime: formData.endTime,
+          numeroAulas: formData.role === 'professor' ? Number(formData.numeroAulas) : null,
           permissions: formData.permissions
         });
       } else {
@@ -117,6 +119,7 @@ export function AdminUsers() {
             workload: Number(formData.workload),
             startTime: formData.startTime,
             endTime: formData.endTime,
+            ...(formData.role === 'professor' ? { numeroAulas: Number(formData.numeroAulas) } : {}),
             createdAt: new Date().toISOString(),
             permissions: formData.permissions
           };
@@ -147,6 +150,7 @@ export function AdminUsers() {
       workload: 160,
       startTime: '08:00',
       endTime: '17:00',
+      numeroAulas: 20,
       permissions: {
         viewLogs: false,
         editLogs: false,
@@ -180,6 +184,7 @@ export function AdminUsers() {
       workload: user.workload,
       startTime: user.startTime || '08:00',
       endTime: user.endTime || '17:00',
+      numeroAulas: user.numeroAulas ?? 20,
       permissions: user.permissions || {
         viewLogs: false,
         editLogs: false,
@@ -281,6 +286,7 @@ export function AdminUsers() {
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">E-mail</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Cargo</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Carga Horária</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nº Aulas/sem</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-right">Ações</th>
                   </tr>
                 </thead>
@@ -322,6 +328,11 @@ export function AdminUsers() {
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                         {user.workload}h / mês
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                        {user.role === 'professor'
+                          ? (user.numeroAulas != null ? `${user.numeroAulas} aulas` : '—')
+                          : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </td>
                       <td className="px-6 py-4 text-right space-x-2">
                         <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400" onClick={() => handleEdit(user)}>

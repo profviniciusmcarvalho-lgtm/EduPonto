@@ -140,10 +140,10 @@ export function Login() {
     <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden transition-colors duration-300">
       {/* Background Mascot Decoration */}
       <div className="absolute -bottom-10 -left-10 opacity-10 hidden lg:block pointer-events-none">
-        <img src={MASCOT_FULL_URL} alt="" className="h-96 w-auto grayscale dark:invert" referrerPolicy="no-referrer" />
+        <img src={MASCOT_FULL_URL} alt="" className="h-96 w-auto grayscale dark:invert" />
       </div>
       <div className="absolute -top-10 -right-10 opacity-10 hidden lg:block pointer-events-none">
-        <img src={MASCOT_FULL_URL} alt="" className="h-96 w-auto grayscale rotate-12 dark:invert" referrerPolicy="no-referrer" />
+        <img src={MASCOT_FULL_URL} alt="" className="h-96 w-auto grayscale rotate-12 dark:invert" />
       </div>
 
       <Card className="w-full max-w-md relative z-10 shadow-2xl border-none">

@@ -12,6 +12,9 @@ import { AdminUsers } from '@/src/pages/AdminUsers';
 import { AdminReports } from '@/src/pages/AdminReports';
 import { BrandIdentity } from '@/src/pages/BrandIdentity';
 import { Unauthorized } from '@/src/pages/Unauthorized';
+import { AdminTurmas } from '@/src/pages/AdminTurmas';
+import { AdminDisciplinas } from '@/src/pages/AdminDisciplinas';
+import { AdminQuadroHorarios } from '@/src/pages/AdminQuadroHorarios';
 import ErrorBoundary from '@/src/components/ErrorBoundary';
 
 export default function App() {
@@ -68,6 +71,30 @@ export default function App() {
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <BrandIdentity />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/turmas" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminTurmas />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/disciplinas" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminDisciplinas />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/quadro-horarios" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminQuadroHorarios />
                 </Layout>
               </ProtectedRoute>
             } />
