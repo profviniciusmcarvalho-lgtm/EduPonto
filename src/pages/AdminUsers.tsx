@@ -46,8 +46,9 @@ export function AdminUsers() {
     email: '',
     password: '',
     role: 'professor' as UserRole,
+    turno: 'integral' as 'matutino' | 'vespertino' | 'noturno' | 'integral',
     workload: 160,
-    startTime: '08:00',
+    startTime: '07:00',
     endTime: '17:00',
     numeroAulas: 20,
     permissions: {
@@ -93,6 +94,7 @@ export function AdminUsers() {
         await updateDoc(userRef, {
           displayName: formData.displayName,
           role: formData.role,
+          turno: formData.turno,
           workload: Number(formData.workload),
           startTime: formData.startTime,
           endTime: formData.endTime,
@@ -119,6 +121,7 @@ export function AdminUsers() {
             email: formData.email,
             displayName: formData.displayName,
             role: formData.role,
+            turno: formData.turno,
             schoolId: adminProfile.schoolId,
             workload: Number(formData.workload),
             startTime: formData.startTime,
@@ -151,8 +154,9 @@ export function AdminUsers() {
       email: '',
       password: '',
       role: 'professor',
+      turno: 'integral',
       workload: 160,
-      startTime: '08:00',
+      startTime: '07:00',
       endTime: '17:00',
       numeroAulas: 20,
       permissions: {
@@ -183,10 +187,11 @@ export function AdminUsers() {
     setFormData({
       displayName: user.displayName,
       email: user.email,
-      password: '', // Don't show password
+      password: '',
       role: user.role,
+      turno: user.turno ?? 'integral',
       workload: user.workload,
-      startTime: user.startTime || '08:00',
+      startTime: user.startTime || '07:00',
       endTime: user.endTime || '17:00',
       numeroAulas: user.numeroAulas ?? 20,
       permissions: user.permissions || {
@@ -340,7 +345,20 @@ export function AdminUsers() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
-                        {user.workload}h / mês
+                        <div className="flex flex-col gap-0.5">
+                          <span>{user.workload}h / mês</span>
+                          {user.turno && (
+                            <span className={cn(
+                              "text-xs px-1.5 py-0.5 rounded-full font-medium w-fit",
+                              user.turno === 'matutino'   ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' :
+                              user.turno === 'vespertino' ? 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300' :
+                              user.turno === 'noturno'    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300' :
+                              'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300'
+                            )}>
+                              {{ matutino: 'Matutino', vespertino: 'Vespertino', noturno: 'Noturno', integral: 'Integral' }[user.turno]}
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
                         {user.role === 'professor'
@@ -570,25 +588,56 @@ export function AdminUsers() {
                   </div>
                 </div>
 
-                {/* Row 3: Turno */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Início Turno</label>
-                    <Input
-                      type="time"
-                      required
-                      value={formData.startTime}
-                      onChange={(e) => setFormData({...formData, startTime: e.target.value})}
-                    />
+                {/* Row 3: Turno presets + times */}
+                <div className="space-y-3">
+                  <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Turno</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {(
+                      [
+                        { value: 'matutino',   label: 'Matutino',   inicio: '07:00', fim: '12:00', color: 'yellow' },
+                        { value: 'vespertino', label: 'Vespertino',  inicio: '13:00', fim: '18:00', color: 'orange' },
+                        { value: 'noturno',    label: 'Noturno',     inicio: '18:30', fim: '22:30', color: 'indigo' },
+                        { value: 'integral',   label: 'Integral',    inicio: '07:00', fim: '17:00', color: 'green'  },
+                      ] as const
+                    ).map(t => (
+                      <button
+                        key={t.value}
+                        type="button"
+                        onClick={() => setFormData(f => ({ ...f, turno: t.value, startTime: t.inicio, endTime: t.fim }))}
+                        className={cn(
+                          "flex flex-col items-center gap-0.5 py-2 px-3 rounded-lg border-2 text-xs font-bold transition-all",
+                          formData.turno === t.value
+                            ? t.color === 'yellow'  ? "border-yellow-400 bg-yellow-50 text-yellow-800 dark:bg-yellow-900/30 dark:border-yellow-600 dark:text-yellow-300"
+                            : t.color === 'orange'  ? "border-orange-400 bg-orange-50 text-orange-800 dark:bg-orange-900/30 dark:border-orange-600 dark:text-orange-300"
+                            : t.color === 'indigo'  ? "border-indigo-400 bg-indigo-50 text-indigo-800 dark:bg-indigo-900/30 dark:border-indigo-600 dark:text-indigo-300"
+                            : "border-green-400 bg-green-50 text-green-800 dark:bg-green-900/30 dark:border-green-600 dark:text-green-300"
+                            : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-slate-500"
+                        )}
+                      >
+                        <span className="uppercase tracking-wider">{t.label}</span>
+                        <span className="font-normal opacity-70">{t.inicio}–{t.fim}</span>
+                      </button>
+                    ))}
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Fim Turno</label>
-                    <Input
-                      type="time"
-                      required
-                      value={formData.endTime}
-                      onChange={(e) => setFormData({...formData, endTime: e.target.value})}
-                    />
+                  <div className="grid grid-cols-2 gap-4 mt-1">
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Início</label>
+                      <Input
+                        type="time"
+                        required
+                        value={formData.startTime}
+                        onChange={(e) => setFormData({...formData, startTime: e.target.value})}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-xs font-medium text-slate-500 dark:text-slate-400">Fim</label>
+                      <Input
+                        type="time"
+                        required
+                        value={formData.endTime}
+                        onChange={(e) => setFormData({...formData, endTime: e.target.value})}
+                      />
+                    </div>
                   </div>
                 </div>
 

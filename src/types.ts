@@ -15,8 +15,9 @@ export interface UserProfile {
   role: UserRole;
   schoolId: string;
   workload: number; // Monthly hours
-  startTime?: string; // e.g., "08:00"
-  endTime?: string; // e.g., "17:00"
+  turno?: 'matutino' | 'vespertino' | 'noturno' | 'integral'; // Named shift
+  startTime?: string; // e.g., "07:00"
+  endTime?: string;   // e.g., "17:00"
   /** Weekly class periods (professors only) */
   numeroAulas?: number;
   createdAt: string;
@@ -62,7 +63,7 @@ export interface Turma {
   id?: string;
   nome: string;         // e.g., "1ºA", "2ºB"
   serie: string;        // e.g., "1º Ano", "9º Ano"
-  turno: 'matutino' | 'vespertino' | 'noturno';
+  turno: 'matutino' | 'vespertino' | 'noturno' | 'integral';
   schoolId: string;
   createdAt: string;
 }

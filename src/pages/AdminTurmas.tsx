@@ -14,15 +14,17 @@ import { Turma } from '@/src/types';
 import { Plus, Search, Edit2, Trash2, X, GraduationCap } from 'lucide-react';
 
 const TURNOS = [
-  { value: 'matutino', label: 'Matutino' },
-  { value: 'vespertino', label: 'Vespertino' },
-  { value: 'noturno', label: 'Noturno' },
+  { value: 'matutino',   label: 'Matutino',   inicio: '07:00', fim: '12:00' },
+  { value: 'vespertino', label: 'Vespertino',  inicio: '13:00', fim: '18:00' },
+  { value: 'noturno',    label: 'Noturno',     inicio: '18:30', fim: '22:30' },
+  { value: 'integral',   label: 'Integral',    inicio: '07:00', fim: '17:00' },
 ] as const;
 
 const TURNO_COLORS: Record<string, string> = {
-  matutino: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+  matutino:   'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
   vespertino: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
-  noturno: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+  noturno:    'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300',
+  integral:   'bg-green-100  text-green-800  dark:bg-green-900/30  dark:text-green-300',
 };
 
 const emptyForm = { nome: '', serie: '', turno: 'matutino' as Turma['turno'] };

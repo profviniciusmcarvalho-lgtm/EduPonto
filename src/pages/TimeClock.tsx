@@ -359,7 +359,9 @@ export function TimeClock() {
               <div className="flex items-center justify-between text-sm">
                 <div className="flex items-center gap-2 text-slate-500 dark:text-slate-400">
                   <Clock size={16} />
-                  <span>Turno Programado:</span>
+                  <span>Turno{profile.turno ? ` ${
+                    { matutino: 'Matutino', vespertino: 'Vespertino', noturno: 'Noturno', integral: 'Integral' }[profile.turno]
+                  }` : ''} Programado:</span>
                 </div>
                 <span className="font-bold text-blue-600 dark:text-blue-400">
                   {profile.startTime} - {profile.endTime}
