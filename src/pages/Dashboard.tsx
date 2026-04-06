@@ -37,6 +37,7 @@ import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subDays
 import { ptBR } from 'date-fns/locale';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
+import { countDelays } from '@/src/lib/attendance-utils';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
 import { MASCOT_FULL_URL } from '@/src/constants';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
@@ -154,30 +155,14 @@ export function Dashboard() {
       let hours = 0;
       let days = new Set<string>();
       let lastIn: Date | null = null;
-      let delays = 0;
       
-      // Group logs by day to find first entry
-      const logsByDay = new Map<string, TimeLog[]>();
+      // Group logs by day to count days worked
       logs.forEach(log => {
-        const dateStr = format(new Date(log.timestamp), 'yyyy-MM-dd');
-        if (!logsByDay.has(dateStr)) logsByDay.set(dateStr, []);
-        logsByDay.get(dateStr)!.push(log);
+        days.add(format(new Date(log.timestamp), 'yyyy-MM-dd'));
       });
 
-      // Calculate delays (first entry of the day > 08:00)
-      const startTimeStr = profile.startTime || "08:00";
-      const [startH, startM] = startTimeStr.split(':').map(Number);
-
-      logsByDay.forEach((dayLogs, dateStr) => {
-        days.add(dateStr);
-        const firstIn = dayLogs.filter(l => l.type === 'in').sort((a, b) => a.timestamp.localeCompare(b.timestamp))[0];
-        if (firstIn) {
-          const inTime = new Date(firstIn.timestamp);
-          if (inTime.getHours() > startH || (inTime.getHours() === startH && inTime.getMinutes() > startM + 15)) {
-            delays++;
-          }
-        }
-      });
+      // Count late arrivals using shared utility
+      const delays = countDelays(logs, profile);
 
       // Calculate total hours
       logs.forEach(log => {

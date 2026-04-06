@@ -20,6 +20,7 @@ import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { Badge } from '@/src/components/ui/Badge';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
+import { isLate, countDelays } from '@/src/lib/attendance-utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
@@ -82,32 +83,8 @@ export function AdminReports() {
       const logsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TimeLog));
       setLogs(logsData);
       
-      // Calculate delays for alerts
-      let totalDelays = 0;
-      const logsByUserAndDay = new Map<string, Map<string, TimeLog[]>>();
-      
-      logsData.forEach(log => {
-        if (!logsByUserAndDay.has(log.userId)) logsByUserAndDay.set(log.userId, new Map());
-        const dateStr = format(new Date(log.timestamp), 'yyyy-MM-dd');
-        if (!logsByUserAndDay.get(log.userId)!.has(dateStr)) logsByUserAndDay.get(log.userId)!.set(dateStr, []);
-        logsByUserAndDay.get(log.userId)!.get(dateStr)!.push(log);
-      });
-
-      logsByUserAndDay.forEach((daysMap, userId) => {
-        const user = users.find(u => u.uid === userId);
-        const startTimeStr = user?.startTime || "08:00";
-        const [startH, startM] = startTimeStr.split(':').map(Number);
-
-        daysMap.forEach((dayLogs) => {
-          const firstIn = dayLogs.filter(l => l.type === 'in').sort((a, b) => a.timestamp.localeCompare(b.timestamp))[0];
-          if (firstIn) {
-            const inTime = new Date(firstIn.timestamp);
-            if (inTime.getHours() > startH || (inTime.getHours() === startH && inTime.getMinutes() > startM + 15)) {
-              totalDelays++;
-            }
-          }
-        });
-      });
+      // Calculate delays for alerts using shared utility
+      const totalDelays = countDelays(logsData, undefined /* per-user startTime not available here */);
 
       setStats(prev => ({ ...prev, delays: totalDelays }));
       setLoading(false);
@@ -129,7 +106,6 @@ export function AdminReports() {
     let hours = 0;
     let days = new Set<string>();
     let lastIn: Date | null = null;
-    let delays = 0;
     
     const logsByDay = new Map<string, TimeLog[]>();
     userLogs.forEach(log => {
@@ -138,19 +114,8 @@ export function AdminReports() {
       logsByDay.get(dateStr)!.push(log);
     });
 
-    const startTimeStr = userProfile?.startTime || "08:00";
-    const [startH, startM] = startTimeStr.split(':').map(Number);
-
-    logsByDay.forEach((dayLogs, dateStr) => {
-      days.add(dateStr);
-      const firstIn = dayLogs.filter(l => l.type === 'in').sort((a, b) => a.timestamp.localeCompare(b.timestamp))[0];
-      if (firstIn) {
-        const inTime = new Date(firstIn.timestamp);
-        if (inTime.getHours() > startH || (inTime.getHours() === startH && inTime.getMinutes() > startM + 15)) {
-          delays++;
-        }
-      }
-    });
+    logsByDay.forEach((_, dateStr) => days.add(dateStr));
+    const delays = countDelays(userLogs, userProfile);
 
     // Sort logs by timestamp for correct hour calculation
     const sortedLogs = [...userLogs].sort((a, b) => a.timestamp.localeCompare(b.timestamp));
@@ -188,14 +153,6 @@ export function AdminReports() {
       delays,
       absences
     };
-  };
-
-  const isLate = (log: TimeLog, user?: UserProfile) => {
-    if (log.type !== 'in') return false;
-    const startTimeStr = user?.startTime || "08:00";
-    const [startH, startM] = startTimeStr.split(':').map(Number);
-    const logTime = new Date(log.timestamp);
-    return logTime.getHours() > startH || (logTime.getHours() === startH && logTime.getMinutes() > startM + 15);
   };
 
   const exportPDF = () => {

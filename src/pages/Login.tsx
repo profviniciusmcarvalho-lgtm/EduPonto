@@ -6,7 +6,7 @@ import {
   GoogleAuthProvider,
   signInWithPopup
 } from 'firebase/auth';
-import { doc, getDoc, setDoc, updateDoc, increment, deleteDoc } from 'firebase/firestore';
+import { doc, getDoc, runTransaction, deleteDoc } from 'firebase/firestore';
 import { auth, db } from '@/src/lib/firebase';
 import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
@@ -63,37 +63,37 @@ export function Login() {
     } catch (err: any) {
       console.error(err);
       
-      // 3. Handle failure and update lockout
-      const lockoutRef = doc(db, 'lockouts', email.toLowerCase());
-      const lockoutSnap = await getDoc(lockoutRef);
-      
-      if (lockoutSnap.exists()) {
-        const data = lockoutSnap.data();
-        const newAttempts = (data.failedAttempts || 0) + 1;
-        const updateData: any = {
-          failedAttempts: increment(1),
-          lastAttempt: new Date().toISOString()
-        };
-        
-        if (newAttempts >= MAX_ATTEMPTS) {
-          const lockedUntil = new Date();
-          lockedUntil.setMinutes(lockedUntil.getMinutes() + LOCKOUT_MINUTES);
-          updateData.lockedUntil = lockedUntil.toISOString();
-        }
-        
-        await updateDoc(lockoutRef, updateData);
-      } else {
-        await setDoc(lockoutRef, {
-          email: email.toLowerCase(),
-          failedAttempts: 1,
-          lastAttempt: new Date().toISOString()
+      // 3. Atomically increment failed attempts — prevents race conditions
+      //    where two concurrent failed logins could reset each other's counters.
+      try {
+        const lockoutRef = doc(db, 'lockouts', email.toLowerCase());
+        await runTransaction(db, async (tx) => {
+          const snap = await tx.get(lockoutRef);
+          const current = snap.exists() ? (snap.data().failedAttempts || 0) : 0;
+          const newAttempts = current + 1;
+          const payload: Record<string, unknown> = {
+            email: email.toLowerCase(),
+            failedAttempts: newAttempts,
+            lastAttempt: new Date().toISOString(),
+          };
+          if (newAttempts >= MAX_ATTEMPTS) {
+            const lockedUntil = new Date();
+            lockedUntil.setMinutes(lockedUntil.getMinutes() + LOCKOUT_MINUTES);
+            payload.lockedUntil = lockedUntil.toISOString();
+          } else {
+            // Remove stale lockout if any (e.g. expired timer)
+            payload.lockedUntil = null;
+          }
+          tx.set(lockoutRef, payload);
         });
+      } catch (txErr) {
+        console.error('Lockout transaction failed:', txErr);
       }
 
-      setError('E-mail ou senha incorretos. Tente novamente.');
-      // Special case: Auth not yet enabled in Firebase Console
       if (err?.code === 'auth/configuration-not-found' || err?.code === 'auth/operation-not-allowed') {
         setError('⚠️ Firebase Authentication não está ativado neste projeto. Acesse o Firebase Console → Authentication → Ativar Email/Senha.');
+      } else {
+        setError('E-mail ou senha incorretos. Tente novamente.');
       }
     } finally {
       setLoading(false);

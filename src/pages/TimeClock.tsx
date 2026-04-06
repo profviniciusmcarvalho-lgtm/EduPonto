@@ -143,6 +143,15 @@ export function TimeClock() {
 
   const handlePunch = async (type: 'in' | 'out') => {
     if (!profile) return;
+
+    // Block punch if the school has geofence configured and the user is outside
+    if (school?.location && geoStatus === 'outside') {
+      setStatus({
+        type: 'error',
+        message: `Você está a ${geoDistance ?? '?'} m da escola — fora do raio permitido (${school.geoRadius ?? 500} m). Aproxime-se da escola para registrar o ponto.`,
+      });
+      return;
+    }
     
     setLoading(true);
     setStatus(null);
@@ -319,10 +328,11 @@ export function TimeClock() {
               size="lg" 
               className={cn(
                 "h-32 flex-col gap-3 text-xl",
-                !isNextIn && "opacity-50 grayscale"
+                (!isNextIn || geoStatus === 'outside') && "opacity-50 grayscale"
               )}
               onClick={() => handlePunch('in')}
-              disabled={loading || !isNextIn}
+              disabled={loading || !isNextIn || geoStatus === 'outside'}
+              title={geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
             >
               <ArrowRight size={32} />
               <span>Entrada</span>
@@ -333,10 +343,11 @@ export function TimeClock() {
               variant="secondary"
               className={cn(
                 "h-32 flex-col gap-3 text-xl border-2 border-slate-200 dark:border-slate-800",
-                isNextIn && "opacity-50 grayscale"
+                (isNextIn || geoStatus === 'outside') && "opacity-50 grayscale"
               )}
               onClick={() => handlePunch('out')}
-              disabled={loading || isNextIn}
+              disabled={loading || isNextIn || geoStatus === 'outside'}
+              title={geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
             >
               <ArrowLeft size={32} />
               <span>Saída</span>
