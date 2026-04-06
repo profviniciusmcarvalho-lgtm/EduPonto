@@ -180,5 +180,27 @@ service cloud.firestore {
       // We use a simple rule here, but in production this should be more restricted
       allow create, update: if isValidLockout(request.resource.data);
     }
+
+    // ── School schedule collections ────────────────────────────────────────────
+
+    match /turmas/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /disciplinas/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /quadroHorarios/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ── Catch-all: deny everything else ────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
   }
 }
