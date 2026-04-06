@@ -1,9 +1,9 @@
 {
-  "projectId": "eduponto-gestao",
-  "appId": "1:992888726579:web:9860e0dfd5c6f299a2ef46",
-  "apiKey": "AIzaSyClDDfH7YVtYmcCJbmjGdDKae2kYTssGiA",
-  "authDomain": "eduponto-gestao.firebaseapp.com",
-  "storageBucket": "eduponto-gestao.firebasestorage.app",
-  "messagingSenderId": "992888726579",
-  "measurementId": ""
+  "projectId": "eduponto-abd16",
+  "appId": "1:724777488171:web:be7c2ae55b7912b6103f6e",
+  "apiKey": "AIzaSyAeG7rUQvaKTfUbHaJNrwLqZfdi0St7ilc",
+  "authDomain": "eduponto-abd16.firebaseapp.com",
+  "storageBucket": "eduponto-abd16.firebasestorage.app",
+  "messagingSenderId": "724777488171",
+  "measurementId": "G-X47YZ7DH7N"
 }

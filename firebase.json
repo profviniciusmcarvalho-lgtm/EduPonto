@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "eduponto-gestao",
+    "site": "eduponto-abd16",
     "public": "dist",
     "ignore": [
       "firebase.json",

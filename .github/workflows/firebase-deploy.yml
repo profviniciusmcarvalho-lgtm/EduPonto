@@ -29,6 +29,6 @@ jobs:
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: ${{ secrets.GITHUB_TOKEN }}
-          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EDUPONTO_GESTAO }}
+          firebaseServiceAccount: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_EDUPONTO_ABD16 }}
           channelId: live
-          projectId: eduponto-gestao
+          projectId: eduponto-abd16
