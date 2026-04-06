@@ -1,10 +1,9 @@
 {
-  "projectId": "ai-studio-applet-webapp-3b275",
-  "appId": "1:827711046519:web:208a19719afd690dd51772",
-  "apiKey": "AIzaSyBnrwjybHXny3RSmPi-eqhfeLvva6TNzTo",
-  "authDomain": "ai-studio-applet-webapp-3b275.firebaseapp.com",
-  "firestoreDatabaseId": "timeclock-db",
-  "storageBucket": "ai-studio-applet-webapp-3b275.firebasestorage.app",
-  "messagingSenderId": "827711046519",
+  "projectId": "eduponto-gestao",
+  "appId": "1:992888726579:web:9860e0dfd5c6f299a2ef46",
+  "apiKey": "AIzaSyClDDfH7YVtYmcCJbmjGdDKae2kYTssGiA",
+  "authDomain": "eduponto-gestao.firebaseapp.com",
+  "storageBucket": "eduponto-gestao.firebasestorage.app",
+  "messagingSenderId": "992888726579",
   "measurementId": ""
 }
