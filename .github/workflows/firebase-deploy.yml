@@ -1,6 +1,6 @@
 name: Deploy to Firebase Hosting
 
-on:
+"on":
   push:
     branches:
       - main
