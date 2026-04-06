@@ -15,6 +15,7 @@ import { Unauthorized } from '@/src/pages/Unauthorized';
 import { AdminTurmas } from '@/src/pages/AdminTurmas';
 import { AdminDisciplinas } from '@/src/pages/AdminDisciplinas';
 import { AdminQuadroHorarios } from '@/src/pages/AdminQuadroHorarios';
+import { AdminFormacaoHorarios } from '@/src/pages/AdminFormacaoHorarios';
 import { AdminEscolas } from '@/src/pages/AdminEscolas';
 import ErrorBoundary from '@/src/components/ErrorBoundary';
 
@@ -100,6 +101,14 @@ export default function App() {
               </ProtectedRoute>
             } />
             
+            <Route path="/formacao-horarios" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminFormacaoHorarios />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
             <Route path="/escolas" element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>

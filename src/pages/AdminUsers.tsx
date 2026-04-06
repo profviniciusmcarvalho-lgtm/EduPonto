@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   collection, 
   query, 
@@ -20,7 +21,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
 import { UserProfile, UserRole, UserPermissions } from '@/src/types';
 import { cn } from '@/src/lib/utils';
-import { Plus, Search, UserPlus, Mail, Shield, Clock, Trash2, Edit2, X, Check, LayoutGrid, List, CheckCircle2 } from 'lucide-react';
+import { Plus, Search, UserPlus, Mail, Shield, Clock, Trash2, Edit2, X, Check, LayoutGrid, List, CheckCircle2, CalendarDays } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { Badge } from '@/src/components/ui/Badge';
@@ -28,6 +29,7 @@ import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 
 export function AdminUsers() {
   const { profile: adminProfile } = useAuth();
+  const navigate = useNavigate();
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -334,7 +336,17 @@ export function AdminUsers() {
                           ? (user.numeroAulas != null ? `${user.numeroAulas} aulas` : '—')
                           : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </td>
-                      <td className="px-6 py-4 text-right space-x-2">
+                      <td className="px-6 py-4 text-right space-x-1">
+                        {user.role === 'professor' && (
+                          <Button
+                            variant="ghost" size="sm"
+                            className="text-blue-500 dark:text-blue-400"
+                            title="Ver formação de horário"
+                            onClick={() => navigate(`/formacao-horarios?prof=${user.uid}`)}
+                          >
+                            <CalendarDays size={15} />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" className="text-blue-600 dark:text-blue-400" onClick={() => handleEdit(user)}>
                           <Edit2 size={16} />
                         </Button>
@@ -492,6 +504,47 @@ export function AdminUsers() {
                     />
                   </div>
                 </div>
+
+                {/* Professor-specific fields */}
+                {formData.role === 'professor' && (
+                  <div className="space-y-3 bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <CalendarDays size={15} className="text-blue-600 dark:text-blue-400" />
+                        <h4 className="text-sm font-bold text-blue-800 dark:text-blue-200 uppercase tracking-tight">
+                          Quadro de Horários
+                        </h4>
+                      </div>
+                      {editingUser && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsModalOpen(false);
+                            navigate(`/formacao-horarios?prof=${editingUser.uid}`);
+                          }}
+                          className="text-xs text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+                        >
+                          <CalendarDays size={12} /> Ver horário deste professor
+                        </button>
+                      )}
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                        Nº de Aulas Semanais
+                      </label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={60}
+                        value={formData.numeroAulas}
+                        onChange={(e) => setFormData({ ...formData, numeroAulas: Number(e.target.value) })}
+                      />
+                      <p className="text-xs text-blue-600 dark:text-blue-400">
+                        Total de períodos de 50 min por semana para este professor.
+                      </p>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-3 bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-100 dark:border-slate-800">
                   <div className="flex items-center gap-2 mb-1">

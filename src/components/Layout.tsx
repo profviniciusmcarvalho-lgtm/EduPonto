@@ -53,6 +53,7 @@ export function Layout({ children }: LayoutProps) {
     { label: 'Relatórios Escolares', icon: FileText, path: '/relatorios', roles: ['admin'], permission: 'viewReports' },
     { label: 'Turmas', icon: GraduationCap, path: '/turmas', roles: ['admin'] },
     { label: 'Disciplinas', icon: BookOpen, path: '/disciplinas', roles: ['admin'] },
+    { label: 'Formação de Horários', icon: Users, path: '/formacao-horarios', roles: ['admin'] },
     { label: 'Quadro de Horários', icon: CalendarDays, path: '/quadro-horarios', roles: ['admin'] },
     { label: 'Escolas', icon: Building2, path: '/escolas', roles: ['admin'] },
     { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
