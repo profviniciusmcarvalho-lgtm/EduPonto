@@ -12,7 +12,7 @@ import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 import { Turma, Disciplina, QuadroHorario, PeriodoAula, DiaSemana, UserProfile } from '@/src/types';
 import {
   CalendarDays, Plus, Trash2, X, AlertTriangle, Users,
-  LayoutGrid, BookUser, CheckCircle2, Circle,
+  LayoutGrid, BookUser, CheckCircle2, Copy,
 } from 'lucide-react';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -62,7 +62,7 @@ const PROF_DOT = [
 
 // ── types ──────────────────────────────────────────────────────────────────────
 
-type ViewMode = 'escola' | 'professor';
+type ViewMode = 'escola' | 'professor' | 'geral';
 
 interface CellKey { turmaId: string; diaSemana: DiaSemana; numero: number }
 
@@ -71,6 +71,10 @@ interface CellForm {
   professorId: string;
   horarioInicio: string;
   horarioFim: string;
+  room: string;
+  cancelled: boolean;
+  cancelReason: string;
+  substituteTeacherId: string;
 }
 
 const emptyCellForm = (numero: number, existing?: PeriodoAula): CellForm => ({
@@ -78,6 +82,10 @@ const emptyCellForm = (numero: number, existing?: PeriodoAula): CellForm => ({
   professorId:  existing?.professorId  ?? '',
   horarioInicio: existing?.horarioInicio ?? defaultPeriodStart(numero),
   horarioFim:    existing?.horarioFim    ?? addFiftyMin(defaultPeriodStart(numero)),
+  room:          existing?.room          ?? '',
+  cancelled:     existing?.cancelled     ?? false,
+  cancelReason:  existing?.cancelReason  ?? '',
+  substituteTeacherId: existing?.substituteTeacherId ?? '',
 });
 
 // ── component ──────────────────────────────────────────────────────────────────
@@ -99,6 +107,19 @@ export function AdminQuadroHorarios() {
   const [editCell, setEditCell]           = useState<CellKey | null>(null);
   const [cellForm, setCellForm]           = useState<CellForm>(emptyCellForm(1));
   const [saving, setSaving]               = useState(false);
+
+  // — filters
+  const [filterTurmaId, setFilterTurmaId] = useState<string>('');
+  const [filterProfId, setFilterProfId]   = useState<string>('');
+  const [filterGeralTurno, setFilterGeralTurno] = useState<string>('');
+
+  // — copy schedule
+  const [showCopyDialog, setShowCopyDialog] = useState(false);
+  const [copyFromTurmaId, setCopyFromTurmaId] = useState('');
+  const [copyToTurmaId, setCopyToTurmaId]     = useState('');
+  const [copyFromDia, setCopyFromDia]         = useState<DiaSemana | ''>('');
+  const [copyToDia, setCopyToDia]             = useState<DiaSemana | ''>('');
+  const [copying, setCopying]                 = useState(false);
 
   // ── load data ────────────────────────────────────────────────────────────────
 
@@ -210,6 +231,19 @@ export function AdminQuadroHorarios() {
   /** Total conflicts count */
   const totalConflicts = conflictKeys.size;
 
+  /** Turmas filtered for escola/geral views */
+  const filteredTurmas = useMemo(
+    () => filterTurmaId ? turmas.filter(t => t.id === filterTurmaId) : turmas,
+    [turmas, filterTurmaId],
+  );
+
+  const TURNO_COLORS: Record<string, string> = {
+    matutino: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/40 dark:text-yellow-300',
+    vespertino: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300',
+    noturno: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/40 dark:text-indigo-300',
+    integral: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300',
+  };
+
   // ── cell editor ──────────────────────────────────────────────────────────────
 
   const openCell = (turmaId: string, dia: DiaSemana, numero: number) => {
@@ -229,6 +263,10 @@ export function AdminQuadroHorarios() {
       const disc = disciplinas.find(d => d.id === cellForm.disciplinaId);
       const prof = professores.find(p => p.uid === cellForm.professorId);
 
+      const subst = cellForm.substituteTeacherId
+        ? professores.find(p => p.uid === cellForm.substituteTeacherId)
+        : undefined;
+
       const periodo: PeriodoAula = {
         numero,
         horarioInicio: cellForm.horarioInicio,
@@ -237,6 +275,10 @@ export function AdminQuadroHorarios() {
         disciplinaNome: disc?.nome ?? '',
         professorId:    cellForm.professorId,
         professorNome:  prof?.displayName ?? '',
+        ...(cellForm.room        ? { room: cellForm.room }               : {}),
+        ...(cellForm.cancelled   ? { cancelled: true }                   : {}),
+        ...(cellForm.cancelReason ? { cancelReason: cellForm.cancelReason } : {}),
+        ...(subst ? { substituteTeacherId: subst.uid, substituteTeacherNome: subst.displayName } : {}),
       };
 
       const existing = quadroMap.get(`${turmaId}_${diaSemana}`);
@@ -276,6 +318,50 @@ export function AdminQuadroHorarios() {
       handleFirestoreError(err, OperationType.DELETE, 'quadroHorarios');
     }
     setEditCell(null);
+  };
+
+  const handleCopySchedule = async () => {
+    if (!copyFromTurmaId || !copyToTurmaId || !adminProfile) return;
+    setCopying(true);
+    try {
+      const sourceDocs = copyFromDia
+        ? quadros.filter(q => q.turmaId === copyFromTurmaId && q.diaSemana === copyFromDia)
+        : quadros.filter(q => q.turmaId === copyFromTurmaId);
+
+      const toTurma = turmas.find(t => t.id === copyToTurmaId);
+      if (!toTurma) return;
+
+      for (const src of sourceDocs) {
+        const targetDia = (copyFromDia && copyToDia) ? copyToDia : src.diaSemana;
+        const existingTarget = quadroMap.get(`${copyToTurmaId}_${targetDia}`);
+        const periodos = src.periodos.map(p => ({
+          ...p,
+          cancelled: false,
+          cancelReason: undefined,
+          substituteTeacherId: undefined,
+          substituteTeacherNome: undefined,
+        }));
+
+        if (existingTarget?.id) {
+          await updateDoc(doc(db, 'quadroHorarios', existingTarget.id), { periodos });
+        } else {
+          await addDoc(collection(db, 'quadroHorarios'), {
+            turmaId: copyToTurmaId,
+            turmaNome: toTurma.nome,
+            diaSemana: targetDia,
+            periodos,
+            schoolId: adminProfile.schoolId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      }
+      setShowCopyDialog(false);
+      setCopyFromTurmaId(''); setCopyToTurmaId(''); setCopyFromDia(''); setCopyToDia('');
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'quadroHorarios');
+    } finally {
+      setCopying(false);
+    }
   };
 
   // ── professor week view data ──────────────────────────────────────────────────
@@ -318,6 +404,14 @@ export function AdminQuadroHorarios() {
               <AlertTriangle size={12} /> {totalConflicts} conflito{totalConflicts !== 1 ? 's' : ''}
             </span>
           )}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowCopyDialog(true)}
+            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
+          >
+            <Copy size={14} /> Copiar Quadro
+          </Button>
           <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700">
             <button
               onClick={() => setViewMode('escola')}
@@ -339,6 +433,16 @@ export function AdminQuadroHorarios() {
             >
               <BookUser size={14} /> Por Professor
             </button>
+            <button
+              onClick={() => setViewMode('geral')}
+              className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium transition-colors border-l border-slate-200 dark:border-slate-700 ${
+                viewMode === 'geral'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <CalendarDays size={14} /> Quadro Geral
+            </button>
           </div>
         </div>
       </div>
@@ -359,6 +463,39 @@ export function AdminQuadroHorarios() {
 
               {/* Left: grid */}
               <div className="space-y-4">
+
+              {/* Filter bar */}
+                <div className="flex flex-wrap items-center gap-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl border border-slate-200 dark:border-slate-700">
+                  <span className="text-xs font-medium text-slate-500 dark:text-slate-400 shrink-0">Filtrar:</span>
+                  <select
+                    value={filterTurmaId}
+                    onChange={e => setFilterTurmaId(e.target.value)}
+                    className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Todas as turmas</option>
+                    {turmas.map(t => (
+                      <option key={t.id} value={t.id!}>{t.nome} {t.turno ? `(${t.turno})` : ''}</option>
+                    ))}
+                  </select>
+                  <select
+                    value={filterProfId}
+                    onChange={e => setFilterProfId(e.target.value)}
+                    className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Todos os professores</option>
+                    {professores.map(p => (
+                      <option key={p.uid} value={p.uid}>{p.displayName}</option>
+                    ))}
+                  </select>
+                  {(filterTurmaId || filterProfId) && (
+                    <button
+                      onClick={() => { setFilterTurmaId(''); setFilterProfId(''); }}
+                      className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
+                    >
+                      <X size={12} /> Limpar filtros
+                    </button>
+                  )}
+                </div>
 
                 {/* Day tabs */}
                 <div className="flex flex-wrap gap-1.5">
@@ -386,10 +523,15 @@ export function AdminQuadroHorarios() {
                         <th className="px-3 py-2.5 text-left font-semibold text-slate-600 dark:text-slate-400 w-24 border-b border-slate-200 dark:border-slate-700">
                           Período
                         </th>
-                        {turmas.map(t => (
+                        {filteredTurmas.map(t => (
                           <th key={t.id} className="px-2 py-2.5 text-center font-semibold text-slate-600 dark:text-slate-400 border-b border-l border-slate-200 dark:border-slate-700 min-w-[120px]">
                             <div className="font-bold text-slate-800 dark:text-slate-200">{t.nome}</div>
                             <div className="text-xs font-normal text-slate-400">{t.serie}</div>
+                            {t.turno && (
+                              <span className={`inline-block text-[10px] px-1.5 py-0.5 rounded-full font-medium mt-0.5 ${TURNO_COLORS[t.turno] ?? ''}`}>
+                                {t.turno}
+                              </span>
+                            )}
                           </th>
                         ))}
                       </tr>
@@ -406,10 +548,12 @@ export function AdminQuadroHorarios() {
                           </td>
 
                           {/* Cells — one per turma */}
-                          {turmas.map(t => {
+                          {filteredTurmas.map(t => {
                             const cell = getCell(t.id!, selectedDia, num);
                             const isConflict = conflictKeys.has(`${t.id}_${selectedDia}_${num}`);
                             const ci = cell?.professorId ? (profColorIdx.get(cell.professorId) ?? 0) : -1;
+                            const dimmed = filterProfId && cell?.professorId !== filterProfId;
+                            const isCancelled = cell?.cancelled;
 
                             return (
                               <td
@@ -418,24 +562,34 @@ export function AdminQuadroHorarios() {
                               >
                                 <div
                                   onClick={() => openCell(t.id!, selectedDia, num)}
-                                  className={`cursor-pointer rounded-lg border p-2 min-h-[56px] flex flex-col justify-center transition-all hover:shadow-sm ${
-                                    cell
-                                      ? `${PROF_BG[ci % PROF_BG.length]}`
-                                      : 'bg-slate-50 dark:bg-slate-800/40 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
+                                  className={`cursor-pointer rounded-lg border p-2 min-h-[56px] flex flex-col justify-center transition-all hover:shadow-sm ${dimmed ? 'opacity-30' : ''} ${
+                                    isCancelled
+                                      ? 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-600 opacity-70'
+                                      : cell
+                                        ? `${PROF_BG[ci % PROF_BG.length]}`
+                                        : 'bg-slate-50 dark:bg-slate-800/40 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
                                   }`}
                                 >
                                   {cell ? (
                                     <>
-                                      <p className="font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate">
+                                      <p className={`font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate ${isCancelled ? 'line-through text-slate-400' : ''}`}>
                                         {cell.disciplinaNome || '—'}
                                       </p>
-                                      <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                        {cell.professorNome || <span className="italic text-slate-400">Sem professor</span>}
-                                      </p>
+                                      {isCancelled ? (
+                                        <span className="text-[10px] text-red-500 font-medium mt-0.5">Cancelada{cell.cancelReason ? `: ${cell.cancelReason}` : ''}</span>
+                                      ) : (
+                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                          {cell.substituteTeacherId
+                                            ? <span className="text-amber-600 dark:text-amber-400">↔ {cell.substituteTeacherNome?.split(' ')[0]}</span>
+                                            : cell.professorNome || <span className="italic text-slate-400">Sem professor</span>
+                                          }
+                                        </p>
+                                      )}
                                       <p className="text-[10px] text-slate-400 tabular-nums mt-0.5">
                                         {cell.horarioInicio}–{cell.horarioFim}
+                                        {cell.room && <span className="ml-1 text-blue-500">· {cell.room}</span>}
                                       </p>
-                                      {isConflict && (
+                                      {isConflict && !isCancelled && (
                                         <span className="flex items-center gap-0.5 text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-medium">
                                           <AlertTriangle size={10} /> conflito
                                         </span>
@@ -570,6 +724,136 @@ export function AdminQuadroHorarios() {
               )}
             </div>
           )}
+          {/* ══════════════════════════════════════════════════════════════════
+              VIEW: QUADRO GERAL — all turmas organized by turno, full week
+          ══════════════════════════════════════════════════════════════════ */}
+          {viewMode === 'geral' && (
+            <div className="space-y-5">
+              {/* Turno filter */}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-sm font-medium text-slate-600 dark:text-slate-400">Turno:</span>
+                {['', 'matutino', 'vespertino', 'noturno', 'integral'].map(turno => (
+                  <button
+                    key={turno}
+                    onClick={() => setFilterGeralTurno(turno)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      filterGeralTurno === turno
+                        ? 'bg-blue-600 text-white shadow-sm'
+                        : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50'
+                    }`}
+                  >
+                    {turno === '' ? 'Todos' : turno.charAt(0).toUpperCase() + turno.slice(1)}
+                  </button>
+                ))}
+              </div>
+
+              {/* Grid: one card per turma */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-5">
+                {(filterGeralTurno
+                  ? turmas.filter(t => t.turno === filterGeralTurno)
+                  : turmas
+                ).map(turma => {
+                  const allNums = new Set<number>(DEFAULT_PERIODS);
+                  DIAS.forEach(({ value: dia }) => {
+                    quadroMap.get(`${turma.id}_${dia}`)?.periodos.forEach(p => allNums.add(p.numero));
+                  });
+                  const nums = Array.from(allNums).sort((a, b) => a - b);
+
+                  return (
+                    <div key={turma.id} className="rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm overflow-hidden">
+                      {/* Turma header */}
+                      <div className="flex items-center gap-2 px-4 py-3 bg-slate-50 dark:bg-slate-800/70 border-b border-slate-200 dark:border-slate-700">
+                        <div>
+                          <h3 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{turma.nome}</h3>
+                          <p className="text-xs text-slate-400">{turma.serie}</p>
+                        </div>
+                        {turma.turno && (
+                          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-semibold ${TURNO_COLORS[turma.turno] ?? ''}`}>
+                            {turma.turno.charAt(0).toUpperCase() + turma.turno.slice(1)}
+                          </span>
+                        )}
+                      </div>
+                      {/* Week mini-grid */}
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs border-collapse min-w-[420px]">
+                          <thead>
+                            <tr className="bg-slate-50/80 dark:bg-slate-800/50">
+                              <th className="px-2 py-1.5 text-left font-semibold text-slate-500 border-b border-slate-200 dark:border-slate-700 w-16">
+                                Aula
+                              </th>
+                              {DIAS.map(({ value, short }) => (
+                                <th key={value} className="px-1.5 py-1.5 text-center font-semibold text-slate-500 border-b border-l border-slate-200 dark:border-slate-700 min-w-[68px]">
+                                  {short}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {nums.map(num => (
+                              <tr key={num} className="border-b border-slate-100 dark:border-slate-800 last:border-0">
+                                <td className="px-2 py-1.5 text-slate-500 dark:text-slate-400 font-medium">
+                                  {num}º
+                                  <div className="text-[10px] tabular-nums text-slate-300 dark:text-slate-600">
+                                    {defaultPeriodStart(num)}
+                                  </div>
+                                </td>
+                                {DIAS.map(({ value: dia }) => {
+                                  const cell = getCell(turma.id!, dia, num);
+                                  const isConflict = conflictKeys.has(`${turma.id}_${dia}_${num}`);
+                                  const ci = cell?.professorId ? (profColorIdx.get(cell.professorId) ?? 0) : -1;
+                                  const dimProfFilter = filterProfId && cell?.professorId !== filterProfId;
+                                  return (
+                                    <td key={dia} className={`px-1 py-1 border-l border-slate-100 dark:border-slate-800 text-center ${dimProfFilter ? 'opacity-30' : ''}`}>
+                                      {cell ? (
+                                        <div className={`rounded px-1 py-1 ${PROF_BG[ci % PROF_BG.length]}`}>
+                                          <p className="font-semibold text-slate-800 dark:text-slate-100 truncate leading-tight">
+                                            {cell.disciplinaNome || '—'}
+                                          </p>
+                                          <p className="text-slate-500 dark:text-slate-400 truncate text-[10px]">
+                                            {cell.professorNome?.split(' ')[0] ?? ''}
+                                          </p>
+                                          {isConflict && <AlertTriangle size={9} className="inline text-red-500" />}
+                                        </div>
+                                      ) : (
+                                        <span className="text-slate-200 dark:text-slate-700">–</span>
+                                      )}
+                                    </td>
+                                  );
+                                })}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Professor filter for geral */}
+              <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-200 dark:border-slate-700">
+                <span className="text-xs font-medium text-slate-500">Filtrar por professor:</span>
+                <select
+                  value={filterProfId}
+                  onChange={e => setFilterProfId(e.target.value)}
+                  className="border border-slate-200 dark:border-slate-700 rounded-lg px-2 py-1.5 text-xs bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">Todos os professores</option>
+                  {professores.map(p => (
+                    <option key={p.uid} value={p.uid}>{p.displayName}</option>
+                  ))}
+                </select>
+                {filterProfId && (
+                  <button
+                    onClick={() => setFilterProfId('')}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10"
+                  >
+                    <X size={12} /> Limpar
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </>
       )}
 
@@ -593,7 +877,7 @@ export function AdminQuadroHorarios() {
               </button>
             </div>
 
-            <div className="p-5 space-y-4">
+            <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
               {/* Time */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1.5">
@@ -656,6 +940,57 @@ export function AdminQuadroHorarios() {
                   </p>
                 )}
               </div>
+
+              {/* Room */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Sala / Local</label>
+                <Input
+                  placeholder="ex: Sala 201, Lab. Informática"
+                  value={cellForm.room}
+                  onChange={e => setCellForm(f => ({ ...f, room: e.target.value }))}
+                />
+              </div>
+
+              {/* Substitute teacher */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Professor Substituto</label>
+                <select
+                  value={cellForm.substituteTeacherId}
+                  onChange={e => setCellForm(f => ({ ...f, substituteTeacherId: e.target.value }))}
+                  className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">— nenhum —</option>
+                  {professores.filter(p => p.uid !== cellForm.professorId).map(p => (
+                    <option key={p.uid} value={p.uid}>{p.displayName}</option>
+                  ))}
+                </select>
+                {cellForm.substituteTeacherId && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    ↔ Aula será ministrada pelo substituto
+                  </p>
+                )}
+              </div>
+
+              {/* Cancel toggle */}
+              <div className="rounded-lg border border-slate-200 dark:border-slate-700 p-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={cellForm.cancelled}
+                    onChange={e => setCellForm(f => ({ ...f, cancelled: e.target.checked }))}
+                    className="w-4 h-4 rounded accent-red-500"
+                  />
+                  <span className="text-xs font-medium text-red-600 dark:text-red-400">Marcar aula como cancelada</span>
+                </label>
+                {cellForm.cancelled && (
+                  <Input
+                    placeholder="Motivo do cancelamento (opcional)"
+                    value={cellForm.cancelReason}
+                    onChange={e => setCellForm(f => ({ ...f, cancelReason: e.target.value }))}
+                    className="text-xs"
+                  />
+                )}
+              </div>
             </div>
 
             <div className="flex items-center justify-between px-5 py-4 border-t border-slate-200 dark:border-slate-700 gap-2">
@@ -675,6 +1010,91 @@ export function AdminQuadroHorarios() {
                   {saving ? 'Salvando...' : 'Salvar'}
                 </Button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* ── Copy Schedule Dialog ──────────────────────────────────────────────────── */}
+      {showCopyDialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-2xl w-full max-w-md">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-700">
+              <div>
+                <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">Copiar Quadro de Horários</h2>
+                <p className="text-xs text-slate-500 mt-0.5">Copie os horários de uma turma/dia para outra</p>
+              </div>
+              <button onClick={() => setShowCopyDialog(false)} className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Origem</p>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Turma</label>
+                    <select
+                      value={copyFromTurmaId}
+                      onChange={e => setCopyFromTurmaId(e.target.value)}
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— selecione —</option>
+                      {turmas.map(t => <option key={t.id} value={t.id!}>{t.nome}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Dia (opcional)</label>
+                    <select
+                      value={copyFromDia}
+                      onChange={e => setCopyFromDia(e.target.value as DiaSemana | '')}
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">Todos os dias</option>
+                      {DIAS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">Destino</p>
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Turma</label>
+                    <select
+                      value={copyToTurmaId}
+                      onChange={e => setCopyToTurmaId(e.target.value)}
+                      className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">— selecione —</option>
+                      {turmas.filter(t => t.id !== copyFromTurmaId).map(t => <option key={t.id} value={t.id!}>{t.nome}</option>)}
+                    </select>
+                  </div>
+                  {copyFromDia && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-medium text-slate-600 dark:text-slate-400">Dia destino</label>
+                      <select
+                        value={copyToDia}
+                        onChange={e => setCopyToDia(e.target.value as DiaSemana | '')}
+                        className="w-full border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-2 text-sm bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Mesmo dia</option>
+                        {DIAS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <p className="text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/20 rounded-lg p-2">
+                ⚠ Horários existentes no destino serão sobrescritos. Cancelamentos e substitutos não são copiados.
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 px-5 py-4 border-t border-slate-200 dark:border-slate-700">
+              <Button variant="ghost" size="sm" onClick={() => setShowCopyDialog(false)}>Cancelar</Button>
+              <Button
+                size="sm"
+                onClick={handleCopySchedule}
+                disabled={copying || !copyFromTurmaId || !copyToTurmaId}
+              >
+                {copying ? 'Copiando...' : 'Copiar Horários'}
+              </Button>
             </div>
           </div>
         </div>

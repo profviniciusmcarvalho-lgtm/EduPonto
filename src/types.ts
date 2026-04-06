@@ -85,6 +85,14 @@ export interface PeriodoAula {
   disciplinaNome: string;
   professorId: string;
   professorNome: string;
+  /** Sala/local da aula */
+  room?: string;
+  /** Aula cancelada */
+  cancelled?: boolean;
+  cancelReason?: string;
+  /** Professor substituto */
+  substituteTeacherId?: string;
+  substituteTeacherNome?: string;
 }
 
 /** One row in the quadro de horários: a turma on a given day of the week */
