@@ -7,7 +7,8 @@ import {
   ArrowUpRight, 
   ArrowDownRight,
   TrendingUp,
-  Users
+  Users,
+  UserX,
 } from 'lucide-react';
 import { 
   BarChart, 
@@ -29,7 +30,6 @@ import {
   limit, 
   onSnapshot,
   getDocs,
-  Timestamp,
   getDocFromServer,
   doc
 } from 'firebase/firestore';
@@ -54,6 +54,10 @@ export function Dashboard() {
     absences: 0,
     currentlyClockedIn: 0
   });
+  // Admin-specific stats
+  const [adminFreqData, setAdminFreqData] = useState<{ date: string; presentes: number }[]>([]);
+  const [faltasMes, setFaltasMes] = useState(0);
+  const [ausenciasPendentes, setAusenciasPendentes] = useState(0);
 
   useEffect(() => {
     if (!profile) return;
@@ -240,6 +244,58 @@ export function Dashboard() {
     };
   }, [profile]);
 
+  // Admin-only: school-wide frequency + ausencias stats
+  useEffect(() => {
+    if (!profile || profile.role !== 'admin') return;
+    const start = startOfMonth(new Date());
+    const end = endOfMonth(new Date());
+
+    // School-wide timeLogs for the month (all users)
+    const schoolLogsQuery = query(
+      collection(db, 'timeLogs'),
+      where('schoolId', '==', profile.schoolId),
+      where('timestamp', '>=', start.toISOString()),
+      where('timestamp', '<=', end.toISOString()),
+      orderBy('timestamp', 'desc'),
+    );
+    const unsubSchool = onSnapshot(schoolLogsQuery, snap => {
+      const logs = snap.docs.map(d => d.data() as TimeLog);
+      // Build per-day unique-user count for 'in' logs
+      const today = new Date();
+      const days = eachDayOfInterval({ start, end: today > end ? end : today });
+      const freqData = days.map(day => {
+        const dayStr = format(day, 'yyyy-MM-dd');
+        const uniqueUsers = new Set(
+          logs.filter(l => l.type === 'in' && l.timestamp.startsWith(dayStr)).map(l => l.userId),
+        );
+        return { date: format(day, 'dd/MM'), presentes: uniqueUsers.size };
+      });
+      setAdminFreqData(freqData);
+    }, err => {
+      console.error('Admin school logs snapshot error:', err);
+    });
+
+    // Ausencias for the month
+    const ausenciasQuery = query(
+      collection(db, 'ausencias'),
+      where('schoolId', '==', profile.schoolId),
+      where('data', '>=', format(start, 'yyyy-MM-dd')),
+      where('data', '<=', format(end, 'yyyy-MM-dd')),
+      orderBy('data', 'desc'),
+    );
+    const unsubAusencias = onSnapshot(ausenciasQuery, snap => {
+      setFaltasMes(snap.size);
+      setAusenciasPendentes(snap.docs.filter(d => d.data().status === 'pendente').length);
+    }, err => {
+      console.error('Admin ausencias snapshot error:', err);
+    });
+
+    return () => {
+      unsubSchool();
+      unsubAusencias();
+    };
+  }, [profile]);
+
   if (loading) {
     return (
       <div className="flex h-full items-center justify-center py-20">
@@ -345,6 +401,86 @@ export function Dashboard() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Admin-only: school-wide stat cards */}
+      {profile?.role === 'admin' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <Card className="bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-900/20">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-red-600 dark:text-red-400 text-sm font-medium">Faltas no Mês</p>
+                  <h3 className="text-3xl font-bold mt-1 text-red-700 dark:text-red-300">{faltasMes}</h3>
+                </div>
+                <div className="bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 p-3 rounded-lg">
+                  <UserX size={24} />
+                </div>
+              </div>
+              <div className="mt-4 text-red-600/60 dark:text-red-400/60 text-xs">
+                Ausências registradas este mês
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-900/20">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-amber-600 dark:text-amber-400 text-sm font-medium">Ausências Pendentes</p>
+                  <h3 className="text-3xl font-bold mt-1 text-amber-700 dark:text-amber-300">{ausenciasPendentes}</h3>
+                </div>
+                <div className="bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 p-3 rounded-lg">
+                  <AlertTriangle size={24} />
+                </div>
+              </div>
+              <div className="mt-4 text-amber-600/60 dark:text-amber-400/60 text-xs">
+                Aguardando justificativa
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {/* Admin-only: school-wide monthly frequency line chart */}
+      {profile?.role === 'admin' && adminFreqData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-lg">Frequência do Mês — Escola</CardTitle>
+          </CardHeader>
+          <CardContent className="h-[280px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={adminFreqData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  dy={10}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fill: '#64748b', fontSize: 11 }}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                  formatter={(val: number) => [val, 'Presentes']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="presentes"
+                  stroke="#2563eb"
+                  strokeWidth={2}
+                  dot={{ fill: '#2563eb', r: 3 }}
+                  activeDot={{ r: 5 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Tips Card */}

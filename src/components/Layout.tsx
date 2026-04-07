@@ -11,7 +11,7 @@ import {
   X,
   Palette,
   Bell,
-  BellOff,
+  BellRing,
   Sun,
   Moon,
   Monitor,
@@ -19,9 +19,14 @@ import {
   BookOpen,
   CalendarDays,
   Building2,
+  AlarmClock,
+  Tv2,
+  UserX,
+  Globe,
+  UserCircle,
 } from 'lucide-react';
 import { useAuth } from '@/src/hooks/useAuth';
-import { useNotifications } from '@/src/hooks/useNotifications';
+import { useSystemNotifications } from '@/src/hooks/useSystemNotifications';
 import { useTheme } from '@/src/hooks/useTheme';
 import { Button } from './ui/Button';
 import { cn } from '@/src/lib/utils';
@@ -34,8 +39,9 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const { profile, logout } = useAuth();
-  const { permission, requestPermission } = useNotifications();
   const { theme, setTheme, resolvedTheme } = useTheme();
+  const { notifications, unreadCount, markAsRead, markAllAsRead } = useSystemNotifications(profile?.schoolId);
+  const [showNotifPanel, setShowNotifPanel] = React.useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = React.useState(false);
@@ -46,17 +52,22 @@ export function Layout({ children }: LayoutProps) {
   };
 
   const navItems = [
-    { label: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['admin', 'professor', 'staff'] },
-    { label: 'Registrar Ponto', icon: Clock, path: '/ponto', roles: ['admin', 'professor', 'staff'] },
-    { label: 'Meus Registros', icon: FileText, path: '/meus-registros', roles: ['admin', 'professor', 'staff'] },
+    { label: 'Dashboard', icon: LayoutDashboard, path: '/', roles: ['admin', 'professor', 'staff', 'superadmin'] },
+    { label: 'Registrar Ponto', icon: Clock, path: '/ponto', roles: ['admin', 'professor', 'staff', 'superadmin'] },
+    { label: 'Meus Registros', icon: FileText, path: '/meus-registros', roles: ['admin', 'professor', 'staff', 'superadmin'] },
     { label: 'Gestão de Usuários', icon: Users, path: '/usuarios', roles: ['admin'], permission: 'manageUsers' },
     { label: 'Relatórios Escolares', icon: FileText, path: '/relatorios', roles: ['admin'], permission: 'viewReports' },
     { label: 'Turmas', icon: GraduationCap, path: '/turmas', roles: ['admin'] },
     { label: 'Disciplinas', icon: BookOpen, path: '/disciplinas', roles: ['admin'] },
     { label: 'Formação de Horários', icon: Users, path: '/formacao-horarios', roles: ['admin'] },
     { label: 'Quadro de Horários', icon: CalendarDays, path: '/quadro-horarios', roles: ['admin'] },
+    { label: 'Calendário Escolar', icon: CalendarDays, path: '/calendario', roles: ['admin'] },
     { label: 'Escolas', icon: Building2, path: '/escolas', roles: ['admin'] },
+    { label: 'Horários de Aula', icon: AlarmClock, path: '/horarios', roles: ['admin'] },
+    { label: 'Terminal de Ponto', icon: Tv2, path: '/terminal', roles: ['admin'] },
+    { label: 'Ausências', icon: UserX, path: '/ausencias', roles: ['admin'] },
     { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
+    { label: 'Rede de Escolas', icon: Globe, path: '/rede', roles: ['superadmin'] },
   ];
 
   const filteredNavItems = navItems.filter(item => {
@@ -79,16 +90,37 @@ export function Layout({ children }: LayoutProps) {
           >
             {resolvedTheme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
           </button>
-          <button 
-            onClick={requestPermission}
-            className={cn(
-              "p-2 rounded-full transition-colors",
-              permission === 'granted' ? "text-blue-600 bg-blue-50" : "text-slate-400 hover:bg-slate-100"
+          <div className="relative">
+            <button onClick={() => setShowNotifPanel(p => !p)}
+              className="p-2 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              title="Notificações">
+              {unreadCount > 0 ? <BellRing size={20} className="text-blue-500" /> : <Bell size={20} />}
+              {unreadCount > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+            {showNotifPanel && (
+              <div className="fixed top-14 right-2 left-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                  <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notificações</span>
+                  <button onClick={() => setShowNotifPanel(false)} className="text-slate-400 hover:text-slate-600"><X size={16} /></button>
+                </div>
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {notifications.length === 0 ? (
+                    <p className="text-xs text-slate-500 text-center py-6">Sem notificações</p>
+                  ) : notifications.map(n => (
+                    <button key={n.id} onClick={() => { markAsRead(n.id!); setShowNotifPanel(false); }}
+                      className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                      <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{n.title}</p>
+                      <p className="text-xs text-slate-500 mt-0.5">{n.message}</p>
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
-            title={permission === 'granted' ? "Notificações Ativadas" : "Ativar Notificações"}
-          >
-            {permission === 'granted' ? <Bell size={20} /> : <BellOff size={20} />}
-          </button>
+          </div>
           <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}>
             {isMobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
           </button>
@@ -130,12 +162,17 @@ export function Layout({ children }: LayoutProps) {
         <div className="p-4 border-t border-slate-200 dark:border-slate-800">
           <div className="flex items-center justify-between mb-4 px-3">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold">
-                {profile?.displayName?.charAt(0).toUpperCase() || 'U'}
-              </div>
+              <Link to={`/perfil/${profile?.uid}`} className="h-10 w-10 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold hover:ring-2 hover:ring-blue-300 transition-all overflow-hidden shrink-0">
+                {profile?.photoUrl
+                  ? <img src={profile.photoUrl} alt="foto" className="h-full w-full object-cover" />
+                  : profile?.displayName?.charAt(0).toUpperCase() || 'U'
+                }
+              </Link>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{profile?.displayName}</p>
-                <p className="text-xs text-slate-500 dark:text-slate-400 truncate capitalize">{profile?.role}</p>
+                <Link to={`/perfil/${profile?.uid}`} className="text-xs text-blue-600 dark:text-blue-400 hover:underline truncate block">
+                  Meu Perfil
+                </Link>
               </div>
             </div>
             <div className="flex items-center gap-1">
@@ -146,16 +183,49 @@ export function Layout({ children }: LayoutProps) {
               >
                 {resolvedTheme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
               </button>
-              <button 
-                onClick={requestPermission}
-                className={cn(
-                  "p-2 rounded-full transition-colors",
-                  permission === 'granted' ? "text-blue-600 bg-blue-50 dark:bg-blue-900/20" : "text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+              <div className="relative">
+                <button
+                  onClick={() => setShowNotifPanel(p => !p)}
+                  className="relative p-2 rounded-full text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                  title="Notificações"
+                >
+                  {unreadCount > 0 ? <BellRing size={18} className="text-blue-500" /> : <Bell size={18} />}
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-0.5 -right-0.5 h-4 w-4 rounded-full bg-red-500 text-white text-[9px] font-bold flex items-center justify-center">
+                      {unreadCount > 9 ? '9+' : unreadCount}
+                    </span>
+                  )}
+                </button>
+                {showNotifPanel && (
+                  <div className="absolute bottom-10 right-0 w-80 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-700">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">Notificações</span>
+                      {unreadCount > 0 && (
+                        <button onClick={markAllAsRead} className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400">
+                          Marcar tudo como lido
+                        </button>
+                      )}
+                    </div>
+                    <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                      {notifications.length === 0 ? (
+                        <p className="text-xs text-slate-500 text-center py-6">Sem notificações</p>
+                      ) : notifications.map(n => (
+                        <button key={n.id} onClick={() => markAsRead(n.id!)}
+                          className={`w-full text-left px-4 py-3 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors ${!n.read ? 'bg-blue-50/50 dark:bg-blue-900/10' : ''}`}>
+                          <div className="flex items-start gap-2">
+                            {!n.read && <span className="mt-1.5 h-2 w-2 rounded-full bg-blue-500 shrink-0" />}
+                            <div className={!n.read ? '' : 'pl-4'}>
+                              <p className="text-xs font-semibold text-slate-800 dark:text-slate-200">{n.title}</p>
+                              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{n.message}</p>
+                              <p className="text-[10px] text-slate-400 mt-1">{new Date(n.createdAt).toLocaleString('pt-BR')}</p>
+                            </div>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
-                title={permission === 'granted' ? "Notificações Ativadas" : "Ativar Notificações"}
-              >
-                {permission === 'granted' ? <Bell size={18} /> : <BellOff size={18} />}
-              </button>
+              </div>
             </div>
           </div>
           <Button 

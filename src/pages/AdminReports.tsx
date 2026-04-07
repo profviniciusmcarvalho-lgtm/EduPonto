@@ -15,7 +15,7 @@ import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
 import { TimeLog, UserProfile } from '@/src/types';
 import { cn } from '@/src/lib/utils';
-import { Calendar, Filter, Download, Users, Clock, AlertTriangle, Search } from 'lucide-react';
+import { Calendar, Filter, Download, Users, Clock, AlertTriangle, Search, FileSpreadsheet } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { Badge } from '@/src/components/ui/Badge';
@@ -23,6 +23,7 @@ import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 import { isLate, countDelays } from '@/src/lib/attendance-utils';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import * as XLSX from 'xlsx';
 
 export function AdminReports() {
   const { profile: adminProfile } = useAuth();
@@ -163,7 +164,7 @@ export function AdminReports() {
     doc.text('EduPonto - Relatório de Frequência', 14, 20);
     
     doc.setFontSize(12);
-    doc.text(`Escola: ${adminProfile?.schoolName || 'N/A'}`, 14, 30);
+    doc.text(`Escola: ${adminProfile?.schoolId || 'N/A'}`, 14, 30);
     doc.text(`Período: ${format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: ptBR })}`, 14, 37);
     doc.text(`Funcionário: ${selectedUser?.displayName || 'Todos os Funcionários'}`, 14, 44);
 
@@ -234,6 +235,47 @@ export function AdminReports() {
     doc.save(`relatorio_ponto_${month}_${selectedUser?.displayName || 'geral'}.pdf`);
   };
 
+  const exportExcel = () => {
+    const selectedUser = users.find(u => u.uid === selectedUserId);
+
+    const logsSheet = logs.map(log => ({
+      'Funcionário': log.userName,
+      'Data': format(new Date(log.timestamp), 'dd/MM/yyyy'),
+      'Hora': format(new Date(log.timestamp), 'HH:mm:ss'),
+      'Tipo': log.type === 'in' ? 'Entrada' : 'Saída',
+      'Dispositivo': log.device,
+    }));
+
+    let summarySheet: object[];
+    if (selectedUserId !== 'all') {
+      const userStats = calculateUserStats(selectedUserId, logs, selectedUser);
+      summarySheet = [{
+        'Funcionário': selectedUser?.displayName ?? 'N/A',
+        'Total de Horas': `${userStats.totalHours}h`,
+        'Dias Trabalhados': userStats.daysWorked,
+        'Atrasos': userStats.delays,
+        'Faltas': userStats.absences,
+      }];
+    } else {
+      summarySheet = users.map(user => {
+        const userLogs = logs.filter(l => l.userId === user.uid);
+        const s = calculateUserStats(user.uid, userLogs, user);
+        return {
+          'Funcionário': user.displayName,
+          'Total de Horas': `${s.totalHours}h`,
+          'Dias Trabalhados': s.daysWorked,
+          'Atrasos': s.delays,
+          'Faltas': s.absences,
+        };
+      });
+    }
+
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(logsSheet), 'Registros');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summarySheet), 'Resumo');
+    XLSX.writeFile(wb, `relatorio_ponto_${month}_${selectedUser?.displayName ?? 'geral'}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -271,6 +313,12 @@ export function AdminReports() {
             <Button variant="outline" className="gap-2" onClick={exportPDF}>
               <Download size={18} />
               <span>Exportar PDF</span>
+            </Button>
+          )}
+          {adminProfile?.permissions?.exportReports && (
+            <Button variant="outline" className="gap-2" onClick={exportExcel}>
+              <FileSpreadsheet size={18} />
+              <span>Exportar Excel</span>
             </Button>
           )}
         </div>

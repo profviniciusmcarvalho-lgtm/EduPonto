@@ -52,7 +52,14 @@ service cloud.firestore {
       return isAuthenticated() && 
         (request.auth.token.email == "profviniciusmcarvalho@gmail.com" ||
          (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role in ['admin', 'superadmin']));
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() &&
+        (request.auth.token.email == "profviniciusmcarvalho@gmail.com" ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'superadmin'));
     }
 
     function isSameSchool(schoolId) {
@@ -92,7 +99,7 @@ service cloud.firestore {
              data.uid is string && data.uid.size() > 0 &&
              data.email is string && isValidEmail(data.email) &&
              data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 100 &&
-             data.role in ['admin', 'professor', 'staff'] &&
+             data.role in ['admin', 'professor', 'staff', 'superadmin'] &&
              data.schoolId is string && data.schoolId.size() > 0 &&
              data.workload is number && data.workload > 0 &&
              data.startTime is string && data.startTime.matches("^\\d{2}:\\d{2}$") &&
@@ -117,7 +124,7 @@ service cloud.firestore {
              data.schoolId is string && data.schoolId.size() > 0 &&
              data.type in ['in', 'out'] &&
              isValidDateString(data.timestamp) &&
-             data.device in ['Mobile', 'Desktop'];
+             data.device in ['Mobile', 'Desktop', 'Terminal'];
     }
 
     // ===============================================================
@@ -152,11 +159,11 @@ service cloud.firestore {
       // Users can read their own logs. Admins can read all logs in their school.
       allow read: if isAuthenticated() && (resource.data.userId == request.auth.uid || (isAdmin() && isSameSchool(resource.data.schoolId)));
       
-      // Users can create their own logs.
+      // Users can create their own logs. Admins can create logs for any user (terminal kiosk).
       allow create: if isAuthenticated() && 
-                      request.resource.data.userId == request.auth.uid && 
                       isValidTimeLog(request.resource.data) &&
-                      isSameSchool(request.resource.data.schoolId);
+                      isSameSchool(request.resource.data.schoolId) &&
+                      (request.resource.data.userId == request.auth.uid || isAdmin());
       
       // Only admins can update logs (for manual edits).
       allow update: if isAdmin() && 
@@ -196,6 +203,35 @@ service cloud.firestore {
     match /quadroHorarios/{id} {
       allow read: if isAuthenticated();
       allow write: if isAdmin();
+    }
+
+    match /horarios/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    match /ausencias/{docId} {
+      allow read: if isAuthenticated() && isSameSchool(resource.data.schoolId);
+      allow create: if isAuthenticated() && isAdmin() && isSameSchool(request.resource.data.schoolId);
+      allow update, delete: if isAuthenticated() && isAdmin() && isSameSchool(resource.data.schoolId);
+    }
+
+    match /notifications/{docId} {
+      allow read: if isAuthenticated() && isSameSchool(resource.data.schoolId);
+      allow create: if isAuthenticated() && isSameSchool(request.resource.data.schoolId);
+      allow update: if isAuthenticated() && isAdmin() && isSameSchool(resource.data.schoolId);
+      allow delete: if isAuthenticated() && isAdmin() && isSameSchool(resource.data.schoolId);
+    }
+
+    match /eventosEscolares/{docId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isAdmin();
+      allow update, delete: if isAuthenticated() && isAdmin();
+    }
+
+    match /networks/{networkId} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && (isAdmin() || isSuperAdmin());
     }
 
     // ── Catch-all: deny everything else ────────────────────────────────────────

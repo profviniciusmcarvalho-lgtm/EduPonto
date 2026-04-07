@@ -9,10 +9,12 @@ import { Card, CardContent } from '@/src/components/ui/Card';
 import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
-import { Turma, Disciplina, QuadroHorario, PeriodoAula, DiaSemana, UserProfile } from '@/src/types';
+import { Turma, Disciplina, QuadroHorario, PeriodoAula, DiaSemana, UserProfile, HorarioAula, NivelEnsino } from '@/src/types';
+import { NIVEIS } from '@/src/pages/AdminTurmas';
 import {
   CalendarDays, Plus, Trash2, X, AlertTriangle, Users,
-  LayoutGrid, BookUser, CheckCircle2, Copy,
+  LayoutGrid, BookUser, CheckCircle2, Copy, GripVertical,
+  MoveHorizontal, CopyPlus, Printer,
 } from 'lucide-react';
 
 // ── helpers ────────────────────────────────────────────────────────────────────
@@ -77,16 +79,23 @@ interface CellForm {
   substituteTeacherId: string;
 }
 
-const emptyCellForm = (numero: number, existing?: PeriodoAula): CellForm => ({
+const emptyCellForm = (numero: number, existing?: PeriodoAula, defaultTimes?: { horarioInicio: string; horarioFim: string }): CellForm => ({
   disciplinaId: existing?.disciplinaId ?? '',
   professorId:  existing?.professorId  ?? '',
-  horarioInicio: existing?.horarioInicio ?? defaultPeriodStart(numero),
-  horarioFim:    existing?.horarioFim    ?? addFiftyMin(defaultPeriodStart(numero)),
+  horarioInicio: existing?.horarioInicio ?? defaultTimes?.horarioInicio ?? defaultPeriodStart(numero),
+  horarioFim:    existing?.horarioFim    ?? defaultTimes?.horarioFim    ?? addFiftyMin(defaultPeriodStart(numero)),
   room:          existing?.room          ?? '',
   cancelled:     existing?.cancelled     ?? false,
   cancelReason:  existing?.cancelReason  ?? '',
   substituteTeacherId: existing?.substituteTeacherId ?? '',
 });
+
+/** Strip undefined values recursively — Firestore rejects `undefined` fields */
+function stripUndefined<T extends object>(obj: T): T {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, v]) => v !== undefined)
+  ) as T;
+}
 
 // ── component ──────────────────────────────────────────────────────────────────
 
@@ -98,6 +107,7 @@ export function AdminQuadroHorarios() {
   const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [professores, setProfessores] = useState<UserProfile[]>([]);
   const [quadros, setQuadros]         = useState<QuadroHorario[]>([]);
+  const [horariosAula, setHorariosAula] = useState<HorarioAula[]>([]);
   const [loading, setLoading]         = useState(true);
 
   // — UI
@@ -111,6 +121,8 @@ export function AdminQuadroHorarios() {
   // — filters
   const [filterTurmaId, setFilterTurmaId] = useState<string>('');
   const [filterProfId, setFilterProfId]   = useState<string>('');
+  const [filterTurno, setFilterTurno]     = useState<'' | 'matutino' | 'vespertino' | 'noturno' | 'integral'>('');
+  const [filterNivel, setFilterNivel]     = useState<NivelEnsino | ''>('');
   const [filterGeralTurno, setFilterGeralTurno] = useState<string>('');
 
   // — copy schedule
@@ -120,6 +132,18 @@ export function AdminQuadroHorarios() {
   const [copyFromDia, setCopyFromDia]         = useState<DiaSemana | ''>('');
   const [copyToDia, setCopyToDia]             = useState<DiaSemana | ''>('');
   const [copying, setCopying]                 = useState(false);
+
+  // — drag & drop (move or copy)
+  const [dragMode, setDragMode] = useState<'move' | 'copy'>('move');
+  const [dragSource, setDragSource] = useState<CellKey | null>(null);
+  const [dragOverKey, setDragOverKey] = useState<string | null>(null);
+
+  // — copy cell picker
+  const [copyPickerSource, setCopyPickerSource] = useState<CellKey | null>(null);
+  const [copyPickerTargetTurma, setCopyPickerTargetTurma] = useState('');
+  const [copyPickerTargetDia, setCopyPickerTargetDia] = useState<DiaSemana | ''>('');
+  const [copyPickerTargetNum, setCopyPickerTargetNum] = useState<number | ''>('');
+  const [copyPickerSaving, setCopyPickerSaving] = useState(false);
 
   // ── load data ────────────────────────────────────────────────────────────────
 
@@ -162,7 +186,13 @@ export function AdminQuadroHorarios() {
       err => handleFirestoreError(err, OperationType.GET, 'quadroHorarios'),
     );
 
-    return () => { u1(); u2(); u3(); u4(); };
+    const u5 = onSnapshot(
+      query(collection(db, 'horarios'), where('schoolId', '==', sid)),
+      snap => setHorariosAula(snap.docs.map(d => ({ id: d.id, ...d.data() } as HorarioAula))),
+      err => handleFirestoreError(err, OperationType.GET, 'horarios'),
+    );
+
+    return () => { u1(); u2(); u3(); u4(); u5(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminProfile]);
 
@@ -179,13 +209,15 @@ export function AdminQuadroHorarios() {
     return quadroMap.get(`${turmaId}_${dia}`)?.periodos.find(p => p.numero === numero);
   }, [quadroMap]);
 
-  /** All period numbers present for a given day (or default 1-6) */
+  /** All period numbers present for a given day (or default 1-6, or from horarios) */
   const periodNumsForDay = useCallback((dia: DiaSemana): number[] => {
     const nums = new Set<number>();
     quadros.filter(q => q.diaSemana === dia).forEach(q => q.periodos.forEach(p => nums.add(p.numero)));
     DEFAULT_PERIODS.forEach(n => nums.add(n));
+    // Also include numbers defined in horarios for the turnos of visible turmas
+    horariosAula.forEach(h => nums.add(h.numero));
     return Array.from(nums).sort((a, b) => a - b);
-  }, [quadros]);
+  }, [quadros, horariosAula]);
 
   /** Map profId → color index */
   const profColorIdx = useMemo(() => {
@@ -193,6 +225,22 @@ export function AdminQuadroHorarios() {
     professores.forEach((p, i) => map.set(p.uid, i));
     return map;
   }, [professores]);
+
+  /** Map "turno_numero" → HorarioAula — for looking up real times by turno + period */
+  const horarioMap = useMemo(() => {
+    const map = new Map<string, HorarioAula>();
+    horariosAula.forEach(h => map.set(`${h.turno}_${h.numero}`, h));
+    return map;
+  }, [horariosAula]);
+
+  /** Return real horario times for a turma's period, falling back to hardcoded defaults */
+  const getHorarioTimes = useCallback((turmaId: string, numero: number): { horarioInicio: string; horarioFim: string } => {
+    const turno = turmas.find(t => t.id === turmaId)?.turno;
+    const h = turno ? horarioMap.get(`${turno}_${numero}`) : undefined;
+    if (h) return { horarioInicio: h.horarioInicio, horarioFim: h.horarioFim };
+    const inicio = defaultPeriodStart(numero);
+    return { horarioInicio: inicio, horarioFim: addFiftyMin(inicio) };
+  }, [turmas, horarioMap]);
 
   /** Map profId → total assigned periods across ALL days */
   const professorLoad = useMemo(() => {
@@ -233,8 +281,11 @@ export function AdminQuadroHorarios() {
 
   /** Turmas filtered for escola/geral views */
   const filteredTurmas = useMemo(
-    () => filterTurmaId ? turmas.filter(t => t.id === filterTurmaId) : turmas,
-    [turmas, filterTurmaId],
+    () => turmas
+      .filter(t => !filterTurmaId || t.id === filterTurmaId)
+      .filter(t => !filterTurno || t.turno === filterTurno)
+      .filter(t => !filterNivel || t.nivel === filterNivel),
+    [turmas, filterTurmaId, filterTurno, filterNivel],
   );
 
   const TURNO_COLORS: Record<string, string> = {
@@ -249,7 +300,8 @@ export function AdminQuadroHorarios() {
   const openCell = (turmaId: string, dia: DiaSemana, numero: number) => {
     const existing = getCell(turmaId, dia, numero);
     setEditCell({ turmaId, diaSemana: dia, numero });
-    setCellForm(emptyCellForm(numero, existing));
+    const defaultTimes = existing ? undefined : getHorarioTimes(turmaId, numero);
+    setCellForm(emptyCellForm(numero, existing, defaultTimes));
   };
 
   const handleSaveCell = async () => {
@@ -320,6 +372,119 @@ export function AdminQuadroHorarios() {
     setEditCell(null);
   };
 
+  // ── drag & drop move / copy ───────────────────────────────────────────────────
+
+  const handleDragStart = (e: React.DragEvent, turmaId: string, dia: DiaSemana, numero: number) => {
+    setDragSource({ turmaId, diaSemana: dia, numero });
+    e.dataTransfer.effectAllowed = dragMode === 'move' ? 'move' : 'copy';
+  };
+
+  const handleDragEnd = () => {
+    setDragSource(null);
+    setDragOverKey(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent, turmaId: string, dia: DiaSemana, numero: number) => {
+    if (!dragSource) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = dragMode === 'move' ? 'move' : 'copy';
+    setDragOverKey(`${turmaId}_${dia}_${numero}`);
+  };
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    if (!(e.currentTarget as HTMLElement).contains(e.relatedTarget as Node)) {
+      setDragOverKey(null);
+    }
+  };
+
+  const handleDropCell = async (turmaId: string, dia: DiaSemana, numero: number) => {
+    setDragOverKey(null);
+    if (!dragSource || !adminProfile) { setDragSource(null); return; }
+    if (dragSource.turmaId === turmaId && dragSource.diaSemana === dia && dragSource.numero === numero) {
+      setDragSource(null);
+      return;
+    }
+    const sourceCell = getCell(dragSource.turmaId, dragSource.diaSemana, dragSource.numero);
+    if (!sourceCell) { setDragSource(null); return; }
+
+    const { horarioInicio, horarioFim } = getHorarioTimes(turmaId, numero);
+    const periodo: PeriodoAula = stripUndefined({
+      ...sourceCell,
+      numero,
+      horarioInicio,
+      horarioFim,
+      cancelled: false,
+      cancelReason: undefined,
+      substituteTeacherId: undefined,
+      substituteTeacherNome: undefined,
+    });
+
+    const turma = turmas.find(t => t.id === turmaId);
+    if (!turma) { setDragSource(null); return; }
+
+    setSaving(true);
+    try {
+      // Detect same-doc scenario: source and dest belong to the same Firestore document
+      const isSameDoc = dragSource.turmaId === turmaId && dragSource.diaSemana === dia;
+
+      if (isSameDoc && dragMode === 'move') {
+        // Single atomic update: swap period number without touching other periods
+        const srcQuadro = quadroMap.get(`${turmaId}_${dia}`);
+        if (srcQuadro?.id) {
+          const periodos = [
+            ...srcQuadro.periodos.filter(p => p.numero !== dragSource.numero && p.numero !== numero),
+            periodo,
+          ].sort((a, b) => a.numero - b.numero);
+          await updateDoc(doc(db, 'quadroHorarios', srcQuadro.id), { periodos });
+        } else {
+          // Source existed (we got sourceCell), so this shouldn't happen — graceful fallback
+          await addDoc(collection(db, 'quadroHorarios'), {
+            turmaId, turmaNome: turma.nome, diaSemana: dia,
+            periodos: [periodo], schoolId: adminProfile.schoolId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+      } else {
+        // Different docs (or copy mode) — write destination first, then remove source if moving
+        const existing = quadroMap.get(`${turmaId}_${dia}`);
+        if (existing?.id) {
+          const periodos = [
+            ...existing.periodos.filter(p => p.numero !== numero),
+            periodo,
+          ].sort((a, b) => a.numero - b.numero);
+          await updateDoc(doc(db, 'quadroHorarios', existing.id), { periodos });
+        } else {
+          await addDoc(collection(db, 'quadroHorarios'), {
+            turmaId,
+            turmaNome: turma.nome,
+            diaSemana: dia,
+            periodos: [periodo],
+            schoolId: adminProfile.schoolId,
+            createdAt: new Date().toISOString(),
+          });
+        }
+
+        // If MOVE mode, clear the source cell from its own doc
+        if (dragMode === 'move') {
+          const srcQuadro = quadroMap.get(`${dragSource.turmaId}_${dragSource.diaSemana}`);
+          if (srcQuadro?.id) {
+            const srcPeriodos = srcQuadro.periodos.filter(p => p.numero !== dragSource.numero);
+            if (srcPeriodos.length === 0) {
+              await deleteDoc(doc(db, 'quadroHorarios', srcQuadro.id));
+            } else {
+              await updateDoc(doc(db, 'quadroHorarios', srcQuadro.id), { periodos: srcPeriodos });
+            }
+          }
+        }
+      }
+    } catch (err) {
+      handleFirestoreError(err, OperationType.WRITE, 'quadroHorarios');
+    } finally {
+      setSaving(false);
+      setDragSource(null);
+    }
+  };
+
   const handleCopySchedule = async () => {
     if (!copyFromTurmaId || !copyToTurmaId || !adminProfile) return;
     setCopying(true);
@@ -334,7 +499,7 @@ export function AdminQuadroHorarios() {
       for (const src of sourceDocs) {
         const targetDia = (copyFromDia && copyToDia) ? copyToDia : src.diaSemana;
         const existingTarget = quadroMap.get(`${copyToTurmaId}_${targetDia}`);
-        const periodos = src.periodos.map(p => ({
+        const periodos = src.periodos.map(p => stripUndefined({
           ...p,
           cancelled: false,
           cancelReason: undefined,
@@ -366,6 +531,10 @@ export function AdminQuadroHorarios() {
 
   // ── professor week view data ──────────────────────────────────────────────────
 
+  const handlePrint = () => {
+    window.print();
+  };
+
   /** Cells assigned to selectedProfId, grouped by day */
   const profWeek = useMemo(() => {
     const byDay: Partial<Record<DiaSemana, Array<{ turmaNome: string; periodo: PeriodoAula }>>> = {};
@@ -388,7 +557,19 @@ export function AdminQuadroHorarios() {
   const selectedProf = professores.find(p => p.uid === selectedProfId);
 
   return (
-    <div className="space-y-5">
+    <>
+      <style>{`
+        @media print {
+          body > div > div > aside,
+          body > div > div > div > header,
+          .no-print { display: none !important; }
+          #quadro-print-area {
+            width: 100% !important;
+            overflow: visible !important;
+          }
+        }
+      `}</style>
+      <div className="space-y-5">
 
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -398,12 +579,45 @@ export function AdminQuadroHorarios() {
             Gerencie os horários de toda a escola · cada aula tem 50 min
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 no-print">
           {totalConflicts > 0 && (
             <span className="flex items-center gap-1 text-xs bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 border border-red-200 dark:border-red-800 px-2 py-1 rounded-full font-medium">
               <AlertTriangle size={12} /> {totalConflicts} conflito{totalConflicts !== 1 ? 's' : ''}
             </span>
           )}
+          {/* Drag mode toggle */}
+          <div className="flex rounded-lg overflow-hidden border border-slate-200 dark:border-slate-700 text-xs font-medium">
+            <button
+              onClick={() => setDragMode('move')}
+              title="Mover: o card sai da origem ao soltar"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 transition-colors ${
+                dragMode === 'move'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <MoveHorizontal size={13} /> Mover
+            </button>
+            <button
+              onClick={() => setDragMode('copy')}
+              title="Copiar: o card permanece na origem ao soltar"
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 border-l border-slate-200 dark:border-slate-700 transition-colors ${
+                dragMode === 'copy'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700'
+              }`}
+            >
+              <CopyPlus size={13} /> Copiar
+            </button>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handlePrint}
+            className="flex items-center gap-1.5 border border-slate-200 dark:border-slate-700"
+          >
+            <Printer size={14} /> Imprimir
+          </Button>
           <Button
             variant="ghost"
             size="sm"
@@ -487,9 +701,37 @@ export function AdminQuadroHorarios() {
                       <option key={p.uid} value={p.uid}>{p.displayName}</option>
                     ))}
                   </select>
-                  {(filterTurmaId || filterProfId) && (
+                  {/* Turno filter chips */}
+                  {(['matutino', 'vespertino', 'noturno', 'integral'] as const).map(turno => (
                     <button
-                      onClick={() => { setFilterTurmaId(''); setFilterProfId(''); }}
+                      key={turno}
+                      onClick={() => setFilterTurno(filterTurno === turno ? '' : turno)}
+                      className={`px-2 py-1 rounded-full text-[11px] font-medium transition-colors capitalize ${
+                        filterTurno === turno
+                          ? TURNO_COLORS[turno]
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      {turno}
+                    </button>
+                  ))}
+                  {/* Nivel filter chips */}
+                  {NIVEIS.map(({ value, label, color }) => (
+                    <button
+                      key={value}
+                      onClick={() => setFilterNivel(filterNivel === value ? '' : value)}
+                      className={`px-2 py-1 rounded-full text-[11px] font-medium transition-colors ${
+                        filterNivel === value
+                          ? color
+                          : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-600'
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                  {(filterTurmaId || filterProfId || filterTurno || filterNivel) && (
+                    <button
+                      onClick={() => { setFilterTurmaId(''); setFilterProfId(''); setFilterTurno(''); setFilterNivel(''); }}
                       className="flex items-center gap-1 text-xs text-red-500 hover:text-red-700 px-2 py-1.5 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/10 transition-colors"
                     >
                       <X size={12} /> Limpar filtros
@@ -515,8 +757,14 @@ export function AdminQuadroHorarios() {
                   ))}
                 </div>
 
+                {/* Print title — only shown when printing */}
+                <div className="hidden print:block text-center mb-4">
+                  <h1 className="text-xl font-bold">Quadro de Horários</h1>
+                  <p className="text-sm">{DIAS.find(d => d.value === selectedDia)?.label} — {new Date().toLocaleDateString('pt-BR')}</p>
+                </div>
+
                 {/* Schedule grid */}
-                <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+                <div id="quadro-print-area" className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
                   <table className="w-full text-sm border-collapse min-w-[600px]">
                     <thead>
                       <tr className="bg-slate-50 dark:bg-slate-800/70">
@@ -539,12 +787,37 @@ export function AdminQuadroHorarios() {
                     <tbody>
                       {periodNumsForDay(selectedDia).map(num => (
                         <tr key={num} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50/50 dark:hover:bg-slate-800/30">
-                          {/* Period label */}
+                          {/* Period label — shows real times when possible */}
                           <td className="px-3 py-2 text-slate-500 dark:text-slate-400">
                             <div className="font-semibold text-slate-700 dark:text-slate-300">{num}º aula</div>
-                            <div className="text-xs tabular-nums text-slate-400">
-                              {defaultPeriodStart(num)}–{addFiftyMin(defaultPeriodStart(num))}
-                            </div>
+                            {(() => {
+                              const uniqueTurnos = [...new Set(filteredTurmas.map(t => t.turno).filter(Boolean))];
+                              if (uniqueTurnos.length === 1) {
+                                const h = horarioMap.get(`${uniqueTurnos[0]}_${num}`);
+                                if (h) return (
+                                  <div className="text-xs tabular-nums text-slate-400">{h.horarioInicio}–{h.horarioFim}</div>
+                                );
+                              } else if (uniqueTurnos.length > 1) {
+                                // Show times per turno as small stacked badges
+                                const lines = uniqueTurnos
+                                  .map(turno => horarioMap.get(`${turno}_${num}`))
+                                  .filter(Boolean) as HorarioAula[];
+                                if (lines.length > 0) return (
+                                  <div className="flex flex-col gap-0.5">
+                                    {lines.map(h => (
+                                      <span key={h.turno} className="text-[9px] tabular-nums text-slate-400 leading-tight">
+                                        {h.horarioInicio}–{h.horarioFim}
+                                      </span>
+                                    ))}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="text-xs tabular-nums text-slate-400">
+                                  {defaultPeriodStart(num)}–{addFiftyMin(defaultPeriodStart(num))}
+                                </div>
+                              );
+                            })()}
                           </td>
 
                           {/* Cells — one per turma */}
@@ -560,44 +833,96 @@ export function AdminQuadroHorarios() {
                                 key={t.id}
                                 className="px-2 py-1.5 border-l border-slate-100 dark:border-slate-800"
                               >
+                                {/* Drop target wrapper — no draggable here */}
                                 <div
-                                  onClick={() => openCell(t.id!, selectedDia, num)}
-                                  className={`cursor-pointer rounded-lg border p-2 min-h-[56px] flex flex-col justify-center transition-all hover:shadow-sm ${dimmed ? 'opacity-30' : ''} ${
-                                    isCancelled
-                                      ? 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-600 opacity-70'
-                                      : cell
-                                        ? `${PROF_BG[ci % PROF_BG.length]}`
-                                        : 'bg-slate-50 dark:bg-slate-800/40 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
+                                  onDragOver={(e) => handleDragOver(e, t.id!, selectedDia, num)}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => { e.preventDefault(); handleDropCell(t.id!, selectedDia, num); }}
+                                  className={`relative rounded-lg border p-2 min-h-[56px] flex flex-col justify-center transition-all hover:shadow-sm ${dimmed ? 'opacity-30' : ''} ${
+                                    dragOverKey === `${t.id}_${selectedDia}_${num}` && dragSource
+                                      ? dragMode === 'move'
+                                        ? 'ring-2 ring-amber-400 ring-offset-1 border-amber-400 bg-amber-50 dark:bg-amber-900/20 scale-[1.02]'
+                                        : 'ring-2 ring-blue-400 ring-offset-1 border-blue-400 bg-blue-50 dark:bg-blue-900/20 scale-[1.02]'
+                                      : dragSource?.turmaId === t.id && dragSource?.diaSemana === selectedDia && dragSource?.numero === num
+                                        ? dragMode === 'move'
+                                          ? 'opacity-20 scale-95 border-dashed border-slate-400'
+                                          : 'opacity-50 scale-95'
+                                        : isCancelled
+                                          ? 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-600 opacity-70'
+                                          : cell
+                                            ? PROF_BG[ci % PROF_BG.length]
+                                            : 'bg-slate-50 dark:bg-slate-800/40 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
                                   }`}
                                 >
                                   {cell ? (
                                     <>
-                                      <p className={`font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate ${isCancelled ? 'line-through text-slate-400' : ''}`}>
-                                        {cell.disciplinaNome || '—'}
-                                      </p>
-                                      {isCancelled ? (
-                                        <span className="text-[10px] text-red-500 font-medium mt-0.5">Cancelada{cell.cancelReason ? `: ${cell.cancelReason}` : ''}</span>
-                                      ) : (
-                                        <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                                          {cell.substituteTeacherId
-                                            ? <span className="text-amber-600 dark:text-amber-400">↔ {cell.substituteTeacherNome?.split(' ')[0]}</span>
-                                            : cell.professorNome || <span className="italic text-slate-400">Sem professor</span>
-                                          }
+                                      {/* Visible drag handle — top-right of card */}
+                                      <div
+                                        draggable
+                                        onDragStart={(e) => handleDragStart(e, t.id!, selectedDia, num)}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={(e) => e.stopPropagation()}
+                                        title={dragMode === 'move' ? 'Arraste para mover esta aula' : 'Arraste para copiar esta aula'}
+                                        className="absolute top-1 right-1 cursor-grab active:cursor-grabbing p-0.5 rounded opacity-30 hover:opacity-90 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity z-10"
+                                      >
+                                        <GripVertical size={13} className="text-slate-600 dark:text-slate-300" />
+                                      </div>
+
+                                      {/* Copy button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCopyPickerSource({ turmaId: t.id!, diaSemana: selectedDia, numero: num });
+                                          setCopyPickerTargetTurma('');
+                                          setCopyPickerTargetDia('');
+                                          setCopyPickerTargetNum('');
+                                        }}
+                                        title="Copiar esta aula para outro horário"
+                                        className="absolute top-1 right-5 p-0.5 rounded opacity-30 hover:opacity-90 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity z-10"
+                                      >
+                                        <Copy size={11} className="text-slate-600 dark:text-slate-300" />
+                                      </button>
+
+                                      {/* Card content — click to edit */}
+                                      <div
+                                        onClick={() => openCell(t.id!, selectedDia, num)}
+                                        className="cursor-pointer pr-4"
+                                      >
+                                        <p className={`font-semibold text-slate-800 dark:text-slate-100 text-xs leading-tight truncate ${isCancelled ? 'line-through text-slate-400' : ''}`}>
+                                          {cell.disciplinaNome || '—'}
                                         </p>
-                                      )}
-                                      <p className="text-[10px] text-slate-400 tabular-nums mt-0.5">
-                                        {cell.horarioInicio}–{cell.horarioFim}
-                                        {cell.room && <span className="ml-1 text-blue-500">· {cell.room}</span>}
-                                      </p>
-                                      {isConflict && !isCancelled && (
-                                        <span className="flex items-center gap-0.5 text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-medium">
-                                          <AlertTriangle size={10} /> conflito
-                                        </span>
-                                      )}
+                                        {isCancelled ? (
+                                          <span className="text-[10px] text-red-500 font-medium mt-0.5">Cancelada{cell.cancelReason ? `: ${cell.cancelReason}` : ''}</span>
+                                        ) : (
+                                          <p className="text-xs text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                                            {cell.substituteTeacherId
+                                              ? <span className="text-amber-600 dark:text-amber-400">↔ {cell.substituteTeacherNome?.split(' ')[0]}</span>
+                                              : cell.professorNome || <span className="italic text-slate-400">Sem professor</span>
+                                            }
+                                          </p>
+                                        )}
+                                        <p className="text-[10px] text-slate-400 tabular-nums mt-0.5">
+                                          {cell.horarioInicio}–{cell.horarioFim}
+                                          {cell.room && <span className="ml-1 text-blue-500">· {cell.room}</span>}
+                                        </p>
+                                        {isConflict && !isCancelled && (
+                                          <span className="flex items-center gap-0.5 text-[10px] text-red-600 dark:text-red-400 mt-0.5 font-medium">
+                                            <AlertTriangle size={10} /> conflito
+                                          </span>
+                                        )}
+                                      </div>
                                     </>
                                   ) : (
-                                    <span className="text-slate-300 dark:text-slate-600 text-xs text-center w-full flex justify-center">
-                                      <Plus size={14} />
+                                    <span
+                                      onClick={() => openCell(t.id!, selectedDia, num)}
+                                      className="cursor-pointer text-slate-300 dark:text-slate-600 text-xs text-center w-full flex justify-center"
+                                    >
+                                      {dragSource
+                                        ? dragMode === 'move'
+                                          ? <MoveHorizontal size={14} className="text-amber-400" />
+                                          : <GripVertical size={14} className="text-blue-300" />
+                                        : <Plus size={14} />
+                                      }
                                     </span>
                                   )}
                                 </div>
@@ -615,6 +940,10 @@ export function AdminQuadroHorarios() {
                   <span className="flex items-center gap-1">
                     <span className="inline-block w-3 h-3 rounded border-dashed border border-slate-300 bg-slate-50" />
                     Clique para atribuir aula
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <GripVertical size={11} />
+                    Arraste pelo ícone ⠿ para mover/copiar aulas
                   </span>
                   {totalConflicts > 0 && (
                     <span className="flex items-center gap-1 text-red-500">
@@ -1099,7 +1428,109 @@ export function AdminQuadroHorarios() {
           </div>
         </div>
       )}
+      {/* ── Copy Cell Picker Modal ── */}
+      {copyPickerSource && (() => {
+        const srcCell = getCell(copyPickerSource.turmaId, copyPickerSource.diaSemana, copyPickerSource.numero);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-white dark:bg-slate-900 rounded-xl shadow-xl p-6 w-full max-w-sm mx-4">
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100 mb-1">Copiar Aula</h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4">
+                {srcCell?.disciplinaNome} · {srcCell?.professorNome}
+              </p>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Turma destino</label>
+                  <select
+                    value={copyPickerTargetTurma}
+                    onChange={e => setCopyPickerTargetTurma(e.target.value)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione a turma...</option>
+                    {turmas.map(t => <option key={t.id} value={t.id!}>{t.nome} ({t.turno})</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Dia da semana</label>
+                  <select
+                    value={copyPickerTargetDia}
+                    onChange={e => setCopyPickerTargetDia(e.target.value as DiaSemana)}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione o dia...</option>
+                    {DIAS.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Período (aula)</label>
+                  <select
+                    value={copyPickerTargetNum}
+                    onChange={e => setCopyPickerTargetNum(Number(e.target.value))}
+                    className="w-full h-9 px-2 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">Selecione o período...</option>
+                    {DEFAULT_PERIODS.map(n => <option key={n} value={n}>{n}º aula</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="outline" size="sm" onClick={() => setCopyPickerSource(null)}>Cancelar</Button>
+                <Button
+                  size="sm"
+                  disabled={!copyPickerTargetTurma || !copyPickerTargetDia || !copyPickerTargetNum || copyPickerSaving}
+                  onClick={async () => {
+                    if (!copyPickerTargetTurma || !copyPickerTargetDia || !copyPickerTargetNum || !adminProfile) return;
+                    const srcCell = getCell(copyPickerSource.turmaId, copyPickerSource.diaSemana, copyPickerSource.numero);
+                    if (!srcCell) return;
+                    setCopyPickerSaving(true);
+                    try {
+                      const { horarioInicio, horarioFim } = getHorarioTimes(copyPickerTargetTurma, copyPickerTargetNum as number);
+                      const periodo: PeriodoAula = stripUndefined({
+                        ...srcCell,
+                        numero: copyPickerTargetNum as number,
+                        horarioInicio,
+                        horarioFim,
+                        cancelled: false,
+                        cancelReason: undefined,
+                        substituteTeacherId: undefined,
+                        substituteTeacherNome: undefined,
+                      });
+                      const turma = turmas.find(t => t.id === copyPickerTargetTurma);
+                      if (!turma) return;
+                      const existing = quadroMap.get(`${copyPickerTargetTurma}_${copyPickerTargetDia}`);
+                      if (existing?.id) {
+                        const periodos = [
+                          ...existing.periodos.filter(p => p.numero !== copyPickerTargetNum),
+                          periodo,
+                        ].sort((a, b) => a.numero - b.numero);
+                        await updateDoc(doc(db, 'quadroHorarios', existing.id), { periodos });
+                      } else {
+                        await addDoc(collection(db, 'quadroHorarios'), {
+                          turmaId: copyPickerTargetTurma,
+                          turmaNome: turma.nome,
+                          diaSemana: copyPickerTargetDia,
+                          periodos: [periodo],
+                          schoolId: adminProfile.schoolId,
+                          createdAt: new Date().toISOString(),
+                        });
+                      }
+                      setCopyPickerSource(null);
+                    } catch (err) {
+                      handleFirestoreError(err, OperationType.WRITE, 'quadroHorarios');
+                    } finally {
+                      setCopyPickerSaving(false);
+                    }
+                  }}
+                >
+                  {copyPickerSaving ? 'Copiando...' : 'Copiar'}
+                </Button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
+    </>
   );
 }
 

@@ -51,6 +51,8 @@ export function AdminUsers() {
     startTime: '07:00',
     endTime: '17:00',
     numeroAulas: 20,
+    matricula: '',
+    cpf: '',
     permissions: {
       viewLogs: false,
       editLogs: false,
@@ -99,6 +101,8 @@ export function AdminUsers() {
           startTime: formData.startTime,
           endTime: formData.endTime,
           numeroAulas: formData.role === 'professor' ? Number(formData.numeroAulas) : null,
+          ...(formData.matricula ? { matricula: formData.matricula } : {}),
+          ...(formData.cpf ? { cpf: formData.cpf.replace(/\D/g, '') } : {}),
           permissions: formData.permissions
         });
       } else {
@@ -127,6 +131,8 @@ export function AdminUsers() {
             startTime: formData.startTime,
             endTime: formData.endTime,
             ...(formData.role === 'professor' ? { numeroAulas: Number(formData.numeroAulas) } : {}),
+            ...(formData.matricula ? { matricula: formData.matricula } : {}),
+            ...(formData.cpf ? { cpf: formData.cpf.replace(/\D/g, '') } : {}),
             createdAt: new Date().toISOString(),
             permissions: formData.permissions
           };
@@ -159,6 +165,8 @@ export function AdminUsers() {
       startTime: '07:00',
       endTime: '17:00',
       numeroAulas: 20,
+      matricula: '',
+      cpf: '',
       permissions: {
         viewLogs: false,
         editLogs: false,
@@ -194,6 +202,8 @@ export function AdminUsers() {
       startTime: user.startTime || '07:00',
       endTime: user.endTime || '17:00',
       numeroAulas: user.numeroAulas ?? 20,
+      matricula: user.matricula ?? '',
+      cpf: user.cpf ?? '',
       permissions: user.permissions || {
         viewLogs: false,
         editLogs: false,
@@ -473,7 +483,7 @@ export function AdminUsers() {
                   ) : (
                     <Button
                       key={p}
-                      variant={p === page ? 'default' : 'outline'}
+                      variant={p === page ? 'primary' : 'outline'}
                       size="sm"
                       className="h-8 w-8 p-0 text-xs"
                       onClick={() => setPage(p as number)}
@@ -548,6 +558,33 @@ export function AdminUsers() {
                       disabled={!!editingUser}
                       value={formData.email}
                       onChange={(e) => setFormData({...formData, email: e.target.value})}
+                    />
+                  </div>
+                </div>
+
+                {/* Row 1b: Matrícula + CPF (for kiosk terminal) */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      Matrícula
+                      <span className="ml-1 text-xs font-normal text-slate-400">(terminal de ponto)</span>
+                    </label>
+                    <Input
+                      placeholder="Ex: 12345"
+                      value={formData.matricula}
+                      onChange={(e) => setFormData({...formData, matricula: e.target.value.trim()})}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                      CPF
+                      <span className="ml-1 text-xs font-normal text-slate-400">(somente números)</span>
+                    </label>
+                    <Input
+                      placeholder="Ex: 12345678901"
+                      maxLength={11}
+                      value={formData.cpf}
+                      onChange={(e) => setFormData({...formData, cpf: e.target.value.replace(/\D/g, '')})}
                     />
                   </div>
                 </div>

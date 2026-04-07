@@ -17,6 +17,12 @@ import { AdminDisciplinas } from '@/src/pages/AdminDisciplinas';
 import { AdminQuadroHorarios } from '@/src/pages/AdminQuadroHorarios';
 import { AdminFormacaoHorarios } from '@/src/pages/AdminFormacaoHorarios';
 import { AdminEscolas } from '@/src/pages/AdminEscolas';
+import { AdminHorarios } from '@/src/pages/AdminHorarios';
+import { TerminalPonto } from '@/src/pages/TerminalPonto';
+import { AdminAusencias } from '@/src/pages/AdminAusencias';
+import { AdminCalendario } from '@/src/pages/AdminCalendario';
+import { PerfilProfessor } from '@/src/pages/PerfilProfessor';
+import { AdminRede } from '@/src/pages/AdminRede';
 import ErrorBoundary from '@/src/components/ErrorBoundary';
 
 export default function App() {
@@ -113,6 +119,52 @@ export default function App() {
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <AdminEscolas />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/horarios" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminHorarios />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/terminal" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <TerminalPonto />
+              </ProtectedRoute>
+            } />
+
+            <Route path="/ausencias" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminAusencias />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/calendario" element={
+              <ProtectedRoute allowedRoles={['admin']}>
+                <Layout>
+                  <AdminCalendario />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/perfil/:uid" element={
+              <ProtectedRoute>
+                <Layout>
+                  <PerfilProfessor />
+                </Layout>
+              </ProtectedRoute>
+            } />
+
+            <Route path="/rede" element={
+              <ProtectedRoute allowedRoles={['superadmin']}>
+                <Layout>
+                  <AdminRede />
                 </Layout>
               </ProtectedRoute>
             } />

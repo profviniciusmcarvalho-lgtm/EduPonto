@@ -26,8 +26,8 @@ export function ProtectedRoute({ children, allowedRoles, requiredPermission }: P
   }
 
   if (profile) {
-    // Admins have access to everything
-    if (profile.role === 'admin') return <>{children}</>;
+    // Admins and superadmins have access to everything
+    if (profile.role === 'admin' || profile.role === 'superadmin') return <>{children}</>;
 
     // Check if user has the required permission
     if (requiredPermission && profile.permissions && profile.permissions[requiredPermission]) {

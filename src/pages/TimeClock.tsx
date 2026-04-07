@@ -39,6 +39,7 @@ import { cn } from '@/src/lib/utils';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 import { MASCOT_STICKER_URL } from '@/src/constants';
 import { Logo } from '@/src/components/Logo';
+import { useEventosBloqueados } from '@/src/hooks/useEventosBloqueados';
 
 /** Haversine formula — returns distance in metres between two GPS points */
 function haversineDistance(
@@ -65,6 +66,7 @@ export function TimeClock() {
   const [school, setSchool] = useState<School | null>(null);
   const [geoStatus, setGeoStatus] = useState<'unknown' | 'inside' | 'outside'>('unknown');
   const [geoDistance, setGeoDistance] = useState<number | null>(null);
+  const { isBlocked, blockedEvent } = useEventosBloqueados(profile?.schoolId);
 
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -144,6 +146,15 @@ export function TimeClock() {
   const handlePunch = async (type: 'in' | 'out') => {
     if (!profile) return;
 
+    // Block punch if today is a blocked school event date
+    if (isBlocked) {
+      setStatus({
+        type: 'error',
+        message: `Registro de ponto bloqueado${blockedEvent ? `: ${blockedEvent.nome}` : ' por evento escolar'}. Entre em contato com a administração.`,
+      });
+      return;
+    }
+
     // Block punch if the school has geofence configured and the user is outside
     if (school?.location && geoStatus === 'outside') {
       setStatus({
@@ -222,6 +233,17 @@ export function TimeClock() {
         </div>
         
         <CardContent className="p-8 space-y-8">
+          {isBlocked && (
+            <div className="p-4 rounded-xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 flex items-start gap-3">
+              <AlertCircle size={20} className="text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-semibold text-amber-800 dark:text-amber-300">Registro de ponto bloqueado</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 mt-0.5">
+                  {blockedEvent ? `Evento: ${blockedEvent.nome}` : 'Dia bloqueado por evento escolar.'}
+                </p>
+              </div>
+            </div>
+          )}
           <AnimatePresence>
             {status && (
               <motion.div 
@@ -328,11 +350,11 @@ export function TimeClock() {
               size="lg" 
               className={cn(
                 "h-32 flex-col gap-3 text-xl",
-                (!isNextIn || geoStatus === 'outside') && "opacity-50 grayscale"
+                (!isNextIn || geoStatus === 'outside' || isBlocked) && "opacity-50 grayscale"
               )}
               onClick={() => handlePunch('in')}
-              disabled={loading || !isNextIn || geoStatus === 'outside'}
-              title={geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
+              disabled={loading || !isNextIn || geoStatus === 'outside' || isBlocked}
+              title={isBlocked ? 'Registro bloqueado' : geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
             >
               <ArrowRight size={32} />
               <span>Entrada</span>
@@ -343,11 +365,11 @@ export function TimeClock() {
               variant="secondary"
               className={cn(
                 "h-32 flex-col gap-3 text-xl border-2 border-slate-200 dark:border-slate-800",
-                (isNextIn || geoStatus === 'outside') && "opacity-50 grayscale"
+                (isNextIn || geoStatus === 'outside' || isBlocked) && "opacity-50 grayscale"
               )}
               onClick={() => handlePunch('out')}
-              disabled={loading || isNextIn || geoStatus === 'outside'}
-              title={geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
+              disabled={loading || isNextIn || geoStatus === 'outside' || isBlocked}
+              title={isBlocked ? 'Registro bloqueado' : geoStatus === 'outside' ? 'Fora do raio da escola' : undefined}
             >
               <ArrowLeft size={32} />
               <span>Saída</span>
