@@ -133,7 +133,8 @@ service cloud.firestore {
 
     match /users/{userId} {
       // Users can read their own profile. Admins can read any profile.
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
+      // Same-school users can also read profiles (needed for schedule board professor list).
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isSameSchool(resource.data.schoolId));
       
       // Only admins can create users, or the bootstrap admin
       allow create: if isAuthenticated() && isValidUser(request.resource.data) && (request.auth.token.email == "profviniciusmcarvalho@gmail.com" || isAdmin());

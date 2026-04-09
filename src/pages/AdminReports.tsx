@@ -8,8 +8,9 @@ import {
   getDocs,
   Timestamp
 } from 'firebase/firestore';
-import { format, startOfMonth, endOfMonth, parseISO, eachDayOfInterval, isSameDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth, isSameDay } from 'date-fns';
+import { parseISO } from 'date-fns/parseISO';
+import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
@@ -165,7 +166,7 @@ export function AdminReports() {
     
     doc.setFontSize(12);
     doc.text(`Escola: ${adminProfile?.schoolId || 'N/A'}`, 14, 30);
-    doc.text(`Período: ${format(parseISO(`${month}-01`), 'MMMM yyyy', { locale: ptBR })}`, 14, 37);
+    doc.text(`Período: ${format(parseISO(`${month}-01`), 'MMMM yyyy')}`, 14, 37);
     doc.text(`Funcionário: ${selectedUser?.displayName || 'Todos os Funcionários'}`, 14, 44);
 
     // 1. Detailed Logs Table

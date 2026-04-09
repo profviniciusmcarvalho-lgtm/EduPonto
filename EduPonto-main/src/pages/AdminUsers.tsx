@@ -54,7 +54,8 @@ export function AdminUsers() {
       viewReports: false,
       exportReports: false
     } as UserPermissions,
-    scheduleId: ''
+    scheduleId: '',
+    subject: '',
   });
 
   useEffect(() => {
@@ -107,7 +108,8 @@ export function AdminUsers() {
           startTime: formData.startTime,
           endTime: formData.endTime,
           permissions: formData.permissions,
-          scheduleId: formData.scheduleId || ''
+          scheduleId: formData.scheduleId || '',
+          subject: formData.role === 'professor' ? formData.subject : '',
         });
       } else {
         // Create new user in Auth using secondary app
@@ -135,7 +137,8 @@ export function AdminUsers() {
             endTime: formData.endTime,
             createdAt: new Date().toISOString(),
             permissions: formData.permissions,
-            ...(formData.scheduleId ? { scheduleId: formData.scheduleId } : {})
+            ...(formData.scheduleId ? { scheduleId: formData.scheduleId } : {}),
+            ...(formData.role === 'professor' && formData.subject ? { subject: formData.subject } : {}),
           };
           
           await setDoc(doc(db, 'users', uid), newUser);
@@ -169,7 +172,9 @@ export function AdminUsers() {
         manageUsers: false,
         viewReports: false,
         exportReports: false
-      }
+      },
+      scheduleId: '',
+      subject: '',
     });
     setEditingUser(null);
   };
@@ -203,7 +208,8 @@ export function AdminUsers() {
         viewReports: false,
         exportReports: false
       },
-      scheduleId: user.scheduleId || ''
+      scheduleId: user.scheduleId || '',
+      subject: user.subject || '',
     });
     setIsModalOpen(true);
   };
@@ -477,6 +483,17 @@ export function AdminUsers() {
                     />
                   </div>
                 </div>
+
+                {formData.role === 'professor' && (
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Disciplina</label>
+                    <Input
+                      placeholder="Ex: Matemática, Português, Ciências..."
+                      value={formData.subject}
+                      onChange={(e) => setFormData({...formData, subject: e.target.value})}
+                    />
+                  </div>
+                )}
 
                 {schedules.length > 0 && (
                   <div className="space-y-2">

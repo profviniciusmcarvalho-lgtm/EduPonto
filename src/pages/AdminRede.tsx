@@ -4,7 +4,6 @@ import {
   addDoc, doc, updateDoc, deleteDoc,
 } from 'firebase/firestore';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
@@ -233,7 +232,7 @@ export function AdminRede() {
                     </div>
                   )}
                   <p className="text-[10px] text-slate-400 dark:text-slate-600 mt-3">
-                    Criado em {format(new Date(network.createdAt), 'dd/MM/yyyy', { locale: ptBR })}
+                    Criado em {format(new Date(network.createdAt), 'dd/MM/yyyy')}
                   </p>
                 </CardContent>
               </Card>

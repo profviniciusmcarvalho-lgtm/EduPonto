@@ -19,9 +19,9 @@ import { db, auth } from '@/src/lib/firebase';
 import firebaseConfig from '@/firebase-applet-config.json';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
-import { UserProfile, UserRole, UserPermissions } from '@/src/types';
+import { UserProfile, UserRole, UserPermissions, Disciplina } from '@/src/types';
 import { cn } from '@/src/lib/utils';
-import { Plus, Search, UserPlus, Mail, Shield, Clock, Trash2, Edit2, X, Check, LayoutGrid, List, CheckCircle2, CalendarDays } from 'lucide-react';
+import { Plus, Search, UserPlus, Mail, Shield, Clock, Trash2, Edit2, X, Check, LayoutGrid, List, CheckCircle2, CalendarDays, BookOpen } from 'lucide-react';
 import { Button } from '@/src/components/ui/Button';
 import { Input } from '@/src/components/ui/Input';
 import { Badge } from '@/src/components/ui/Badge';
@@ -31,6 +31,7 @@ export function AdminUsers() {
   const { profile: adminProfile } = useAuth();
   const navigate = useNavigate();
   const [users, setUsers] = useState<UserProfile[]>([]);
+  const [disciplinas, setDisciplinas] = useState<Disciplina[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
@@ -59,7 +60,9 @@ export function AdminUsers() {
       manageUsers: false,
       viewReports: false,
       exportReports: false
-    } as UserPermissions
+    } as UserPermissions,
+    disciplinasMinistradas: [] as Array<{ disciplinaId: string; disciplinaNome: string; numeroAulas: number }>,
+    scheduleId: '',
   });
 
   useEffect(() => {
@@ -82,7 +85,18 @@ export function AdminUsers() {
       }, 0);
     });
 
-    return () => unsubscribe();
+    const unsubDisciplinas = onSnapshot(
+      query(collection(db, 'disciplinas'), where('schoolId', '==', adminProfile.schoolId)),
+      snap => {
+        const list = snap.docs.map(d => ({ id: d.id, ...d.data() } as Disciplina));
+        list.sort((a, b) => a.nome.localeCompare(b.nome));
+        setDisciplinas(list);
+      },
+      err => handleFirestoreError(err, OperationType.GET, 'disciplinas'),
+    );
+
+    return () => { unsubscribe(); unsubDisciplinas(); };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminProfile]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -101,6 +115,7 @@ export function AdminUsers() {
           startTime: formData.startTime,
           endTime: formData.endTime,
           numeroAulas: formData.role === 'professor' ? Number(formData.numeroAulas) : null,
+          ...(formData.role === 'professor' ? { disciplinasMinistradas: formData.disciplinasMinistradas } : { disciplinasMinistradas: [] }),
           ...(formData.matricula ? { matricula: formData.matricula } : {}),
           ...(formData.cpf ? { cpf: formData.cpf.replace(/\D/g, '') } : {}),
           permissions: formData.permissions
@@ -130,7 +145,7 @@ export function AdminUsers() {
             workload: Number(formData.workload),
             startTime: formData.startTime,
             endTime: formData.endTime,
-            ...(formData.role === 'professor' ? { numeroAulas: Number(formData.numeroAulas) } : {}),
+            ...(formData.role === 'professor' ? { numeroAulas: Number(formData.numeroAulas), disciplinasMinistradas: formData.disciplinasMinistradas } : {}),
             ...(formData.matricula ? { matricula: formData.matricula } : {}),
             ...(formData.cpf ? { cpf: formData.cpf.replace(/\D/g, '') } : {}),
             createdAt: new Date().toISOString(),
@@ -167,15 +182,9 @@ export function AdminUsers() {
       numeroAulas: 20,
       matricula: '',
       cpf: '',
+      disciplinasMinistradas: [] as Array<{ disciplinaId: string; disciplinaNome: string; numeroAulas: number }>,
+      scheduleId: '',
       permissions: {
-        viewLogs: false,
-        editLogs: false,
-        manageUsers: false,
-        viewReports: false,
-        exportReports: false
-      }
-    });
-    setEditingUser(null);
   };
 
   const handleRoleChange = async (uid: string, newRole: UserRole) => {
@@ -204,6 +213,8 @@ export function AdminUsers() {
       numeroAulas: user.numeroAulas ?? 20,
       matricula: user.matricula ?? '',
       cpf: user.cpf ?? '',
+      disciplinasMinistradas: user.disciplinasMinistradas ?? [],
+      scheduleId: user.scheduleId ?? '',
       permissions: user.permissions || {
         viewLogs: false,
         editLogs: false,
@@ -226,8 +237,8 @@ export function AdminUsers() {
   };
 
   const filteredUsers = users.filter(user => 
-    user.displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase())
+    (user.displayName ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (user.email ?? '').toLowerCase().includes(searchTerm.toLowerCase())
   );
 
   const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
@@ -324,10 +335,10 @@ export function AdminUsers() {
                       <td className="px-6 py-4">
                         <div className="flex items-center gap-3">
                           <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-600 dark:text-slate-400 font-bold text-xs">
-                            {user.displayName.charAt(0).toUpperCase()}
-                          </div>
-                          <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{user.displayName}</span>
-                        </div>
+                            {(user.displayName ?? '?').charAt(0).toUpperCase()}
+                           </div>
+                           <span className="text-sm font-medium text-slate-900 dark:text-slate-100">{user.displayName}</span>
+                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400">
                         {user.email}
@@ -371,9 +382,24 @@ export function AdminUsers() {
                         </div>
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
-                        {user.role === 'professor'
-                          ? (user.numeroAulas != null ? `${user.numeroAulas} aulas` : '—')
-                          : <span className="text-slate-300 dark:text-slate-600">—</span>}
+                        {user.role === 'professor' ? (
+                          <div className="space-y-1">
+                            {user.numeroAulas != null && (
+                              <span className="block font-medium">{user.numeroAulas} aulas/sem</span>
+                            )}
+                            {user.disciplinasMinistradas && user.disciplinasMinistradas.length > 0 && (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {user.disciplinasMinistradas.map((dm, i) => (
+                                  <span key={i} className="inline-flex items-center gap-1 text-[11px] bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800 px-1.5 py-0.5 rounded-full">
+                                    {dm.disciplinaNome}
+                                    <span className="font-bold">{dm.numeroAulas}×</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
+                            {(!user.numeroAulas && (!user.disciplinasMinistradas || user.disciplinasMinistradas.length === 0)) && '—'}
+                          </div>
+                        ) : <span className="text-slate-300 dark:text-slate-600">—</span>}
                       </td>
                       <td className="px-6 py-4 text-right space-x-1">
                         {user.role === 'professor' && (
@@ -406,7 +432,7 @@ export function AdminUsers() {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div className="h-12 w-12 rounded-full bg-blue-50 dark:bg-blue-900/20 flex items-center justify-center text-blue-600 dark:text-blue-400 font-bold text-lg">
-                          {user.displayName.charAt(0).toUpperCase()}
+                          {(user.displayName ?? '?').charAt(0).toUpperCase()}
                         </div>
                         <div className="min-w-0">
                           <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{user.displayName}</h3>
@@ -715,6 +741,88 @@ export function AdminUsers() {
                       <p className="text-xs text-blue-600 dark:text-blue-400">
                         Total de períodos de 50 min por semana para este professor.
                       </p>
+                    </div>
+
+                    {/* Disciplinas ministradas */}
+                    <div className="space-y-2 pt-1">
+                      <div className="flex items-center gap-2">
+                        <BookOpen size={14} className="text-blue-600 dark:text-blue-400" />
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
+                          Disciplinas Ministradas
+                        </label>
+                      </div>
+
+                      {/* Existing entries */}
+                      {formData.disciplinasMinistradas.length > 0 && (
+                        <div className="space-y-2">
+                          {formData.disciplinasMinistradas.map((dm, idx) => (
+                            <div key={idx} className="flex items-center gap-2 bg-white dark:bg-slate-800 border border-blue-100 dark:border-blue-800 rounded-lg px-3 py-2">
+                              <span className="flex-1 text-sm text-slate-800 dark:text-slate-100 truncate">{dm.disciplinaNome}</span>
+                              <div className="flex items-center gap-1 shrink-0">
+                                <Input
+                                  type="number"
+                                  min={1}
+                                  max={40}
+                                  value={dm.numeroAulas}
+                                  title="Nº de aulas por semana"
+                                  className="h-7 w-16 text-xs text-center px-1"
+                                  onChange={(e) => {
+                                    const updated = formData.disciplinasMinistradas.map((d, i) =>
+                                      i === idx ? { ...d, numeroAulas: Number(e.target.value) } : d
+                                    );
+                                    setFormData({ ...formData, disciplinasMinistradas: updated });
+                                  }}
+                                />
+                                <span className="text-xs text-slate-400">aulas/sem</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const updated = formData.disciplinasMinistradas.filter((_, i) => i !== idx);
+                                    setFormData({ ...formData, disciplinasMinistradas: updated });
+                                  }}
+                                  className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded transition-colors"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Add discipline row */}
+                      {(() => {
+                        const usedIds = new Set(formData.disciplinasMinistradas.map(d => d.disciplinaId));
+                        const available = disciplinas.filter(d => !usedIds.has(d.id!));
+                        if (available.length === 0 && disciplinas.length === 0) return (
+                          <p className="text-xs text-slate-400 italic">Nenhuma disciplina cadastrada ainda.</p>
+                        );
+                        if (available.length === 0) return (
+                          <p className="text-xs text-slate-400 italic">Todas as disciplinas já foram adicionadas.</p>
+                        );
+                        return (
+                          <select
+                            className="w-full h-9 rounded-lg border border-dashed border-blue-300 dark:border-blue-700 bg-white dark:bg-slate-800 px-3 text-sm text-slate-600 dark:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-400 cursor-pointer"
+                            value=""
+                            onChange={(e) => {
+                              const disc = disciplinas.find(d => d.id === e.target.value);
+                              if (!disc) return;
+                              setFormData({
+                                ...formData,
+                                disciplinasMinistradas: [
+                                  ...formData.disciplinasMinistradas,
+                                  { disciplinaId: disc.id!, disciplinaNome: disc.nome, numeroAulas: 1 },
+                                ],
+                              });
+                            }}
+                          >
+                            <option value="">+ Adicionar disciplina…</option>
+                            {available.map(d => (
+                              <option key={d.id} value={d.id!}>{d.nome}</option>
+                            ))}
+                          </select>
+                        );
+                      })()}
                     </div>
                   </div>
                 )}

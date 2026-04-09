@@ -33,8 +33,8 @@ import {
   getDocFromServer,
   doc
 } from 'firebase/firestore';
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, subDays } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth, isSameDay, subDays } from 'date-fns';
+import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { countDelays } from '@/src/lib/attendance-utils';
@@ -224,7 +224,7 @@ export function Dashboard() {
         });
 
         return {
-          name: format(day, 'EEE', { locale: ptBR }),
+          name: format(day, 'EEE'),
           hours: Math.round(dayHours * 10) / 10
         };
       });
@@ -343,7 +343,7 @@ export function Dashboard() {
               </div>
             </div>
             <div className="mt-4 text-slate-400 dark:text-slate-500 text-xs">
-              Mês de {format(new Date(), 'MMMM', { locale: ptBR })}
+              Mês de {format(new Date(), 'MMMM')}
             </div>
           </CardContent>
         </Card>
@@ -570,7 +570,7 @@ export function Dashboard() {
                         {log.type === 'in' ? 'Entrada' : 'Saída'} registrada
                       </p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {format(new Date(log.timestamp), "dd 'de' MMMM, HH:mm", { locale: ptBR })}
+                        {format(new Date(log.timestamp), "dd 'de' MMMM, HH:mm")}
                       </p>
                     </div>
                   </div>

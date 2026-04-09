@@ -10,7 +10,6 @@ import { TimeClock } from '@/src/pages/TimeClock';
 import { UserLogs } from '@/src/pages/UserLogs';
 import { AdminUsers } from '@/src/pages/AdminUsers';
 import { AdminReports } from '@/src/pages/AdminReports';
-import { BrandIdentity } from '@/src/pages/BrandIdentity';
 import { Unauthorized } from '@/src/pages/Unauthorized';
 import { AdminTurmas } from '@/src/pages/AdminTurmas';
 import { AdminDisciplinas } from '@/src/pages/AdminDisciplinas';
@@ -75,15 +74,7 @@ export default function App() {
               </ProtectedRoute>
             } />
             
-            <Route path="/identidade" element={
-              <ProtectedRoute allowedRoles={['admin']}>
-                <Layout>
-                  <BrandIdentity />
-                </Layout>
-              </ProtectedRoute>
-            } />
-
-            <Route path="/turmas" element={
+            <Route path="/turmas"element={
               <ProtectedRoute allowedRoles={['admin']}>
                 <Layout>
                   <AdminTurmas />

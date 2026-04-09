@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   collection, query, where, onSnapshot,
   addDoc, doc, updateDoc, deleteDoc,
@@ -101,6 +102,7 @@ function stripUndefined<T extends object>(obj: T): T {
 
 export function AdminQuadroHorarios() {
   const { profile: adminProfile } = useAuth();
+  const location = useLocation();
 
   // — data
   const [turmas, setTurmas]           = useState<Turma[]>([]);
@@ -171,7 +173,7 @@ export function AdminQuadroHorarios() {
       query(collection(db, 'users'), where('schoolId', '==', sid), where('role', '==', 'professor')),
       snap => {
         const list = snap.docs.map(d => ({ uid: d.id, ...d.data() } as UserProfile));
-        list.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        list.sort((a, b) => (a.displayName ?? '').localeCompare(b.displayName ?? ''));
         setProfessores(list);
       },
       err => handleFirestoreError(err, OperationType.GET, 'users'),
@@ -195,6 +197,17 @@ export function AdminQuadroHorarios() {
     return () => { u1(); u2(); u3(); u4(); u5(); };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [adminProfile]);
+
+  // ── read URL param ?prof=<uid> to auto-select professor ──────────────────────
+  useEffect(() => {
+    const profId = new URLSearchParams(location.search).get('prof');
+    if (profId && professores.some(p => p.uid === profId)) {
+      setSelectedProfId(profId);
+      setViewMode('professor');
+    }
+  // Only re-run when professores list is loaded (or location changes)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [professores, location.search]);
 
   // ── derived data ─────────────────────────────────────────────────────────────
 
@@ -537,13 +550,13 @@ export function AdminQuadroHorarios() {
 
   /** Cells assigned to selectedProfId, grouped by day */
   const profWeek = useMemo(() => {
-    const byDay: Partial<Record<DiaSemana, Array<{ turmaNome: string; periodo: PeriodoAula }>>> = {};
+    const byDay: Partial<Record<DiaSemana, Array<{ turmaNome: string; turmaId: string; periodo: PeriodoAula }>>> = {};
     if (!selectedProfId) return byDay;
     quadros.forEach(q => {
       q.periodos.forEach(p => {
         if (p.professorId !== selectedProfId) return;
         if (!byDay[q.diaSemana]) byDay[q.diaSemana] = [];
-        byDay[q.diaSemana]!.push({ turmaNome: q.turmaNome, periodo: p });
+        byDay[q.diaSemana]!.push({ turmaNome: q.turmaNome, turmaId: q.turmaId, periodo: p });
       });
     });
     DIAS.forEach(({ value }) => {
@@ -1027,21 +1040,86 @@ export function AdminQuadroHorarios() {
                           </td>
                           {DIAS.map(({ value: dia }) => {
                             const slot = profWeek[dia]?.find(s => s.periodo.numero === num);
+                            const dropKey = slot ? `${slot.turmaId}_${dia}_${num}` : `prof_${dia}_${num}`;
+                            const isDropTarget = !!dragSource && dragOverKey === dropKey;
+                            const isSource = !!slot && dragSource?.turmaId === slot.turmaId && dragSource?.diaSemana === dia && dragSource?.numero === num;
                             return (
-                              <td key={dia} className="px-2 py-1.5 border-l border-slate-100 dark:border-slate-800 text-center">
-                                {slot ? (
-                                  <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg px-2 py-1.5 text-xs">
-                                    <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
-                                      {slot.periodo.disciplinaNome || '—'}
-                                    </p>
-                                    <p className="text-slate-500 dark:text-slate-400 truncate">{slot.turmaNome}</p>
-                                    <p className="text-[10px] text-slate-400 tabular-nums">
-                                      {slot.periodo.horarioInicio}–{slot.periodo.horarioFim}
-                                    </p>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-200 dark:text-slate-700 text-xs">–</span>
-                                )}
+                              <td key={dia} className="px-2 py-1.5 border-l border-slate-100 dark:border-slate-800">
+                                <div
+                                  onDragOver={(e) => {
+                                    if (!dragSource) return;
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = dragMode === 'move' ? 'move' : 'copy';
+                                    setDragOverKey(dropKey);
+                                  }}
+                                  onDragLeave={handleDragLeave}
+                                  onDrop={(e) => {
+                                    e.preventDefault();
+                                    const targetTurmaId = slot ? slot.turmaId : dragSource?.turmaId;
+                                    if (targetTurmaId) handleDropCell(targetTurmaId, dia, num);
+                                  }}
+                                  className={`relative rounded-lg border p-2 min-h-[56px] flex flex-col justify-center transition-all ${
+                                    isDropTarget
+                                      ? dragMode === 'move'
+                                        ? 'ring-2 ring-amber-400 ring-offset-1 border-amber-400 bg-amber-50 dark:bg-amber-900/20 scale-[1.02]'
+                                        : 'ring-2 ring-blue-400 ring-offset-1 border-blue-400 bg-blue-50 dark:bg-blue-900/20 scale-[1.02]'
+                                      : isSource
+                                        ? dragMode === 'move'
+                                          ? 'opacity-20 scale-95 border-dashed border-slate-400'
+                                          : 'opacity-50 scale-95 bg-blue-50 dark:bg-blue-900/30 border-blue-200 dark:border-blue-700'
+                                        : slot
+                                          ? 'bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 hover:shadow-sm'
+                                          : 'bg-slate-50 dark:bg-slate-800/40 border-dashed border-slate-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700'
+                                  }`}
+                                >
+                                  {slot ? (
+                                    <>
+                                      {/* Drag handle */}
+                                      <div
+                                        draggable
+                                        onDragStart={(e) => handleDragStart(e, slot.turmaId, dia, num)}
+                                        onDragEnd={handleDragEnd}
+                                        onClick={(e) => e.stopPropagation()}
+                                        title={dragMode === 'move' ? 'Arraste para mover esta aula' : 'Arraste para copiar esta aula'}
+                                        className="absolute top-1 right-1 cursor-grab active:cursor-grabbing p-0.5 rounded opacity-30 hover:opacity-90 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity z-10"
+                                      >
+                                        <GripVertical size={13} className="text-slate-600 dark:text-slate-300" />
+                                      </div>
+                                      {/* Copy button */}
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCopyPickerSource({ turmaId: slot.turmaId, diaSemana: dia, numero: num });
+                                          setCopyPickerTargetTurma('');
+                                          setCopyPickerTargetDia('');
+                                          setCopyPickerTargetNum('');
+                                        }}
+                                        title="Copiar esta aula para outro horário/turma"
+                                        className="absolute top-1 right-5 p-0.5 rounded opacity-30 hover:opacity-90 hover:bg-black/10 dark:hover:bg-white/10 transition-opacity z-10"
+                                      >
+                                        <Copy size={11} className="text-slate-600 dark:text-slate-300" />
+                                      </button>
+                                      <div className="pr-8 text-xs">
+                                        <p className="font-semibold text-slate-800 dark:text-slate-100 truncate">
+                                          {slot.periodo.disciplinaNome || '—'}
+                                        </p>
+                                        <p className="text-slate-500 dark:text-slate-400 truncate">{slot.turmaNome}</p>
+                                        <p className="text-[10px] text-slate-400 tabular-nums">
+                                          {slot.periodo.horarioInicio}–{slot.periodo.horarioFim}
+                                        </p>
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <span className="text-slate-200 dark:text-slate-700 text-xs flex justify-center">
+                                      {dragSource
+                                        ? dragMode === 'move'
+                                          ? <MoveHorizontal size={14} className="text-amber-400" />
+                                          : <GripVertical size={14} className="text-blue-300" />
+                                        : '–'
+                                      }
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                             );
                           })}
@@ -1051,6 +1129,18 @@ export function AdminQuadroHorarios() {
                   </table>
                 </div>
               )}
+
+              {/* Legend */}
+              <div className="flex flex-wrap gap-2 text-xs text-slate-500 dark:text-slate-400">
+                <span className="flex items-center gap-1">
+                  <GripVertical size={11} />
+                  Arraste pelo ícone ⠿ para mover/copiar aulas entre dias e períodos
+                </span>
+                <span className="flex items-center gap-1">
+                  <Copy size={11} />
+                  Clique em ⧉ para copiar a aula para outra turma ou horário
+                </span>
+              </div>
             </div>
           )}
           {/* ══════════════════════════════════════════════════════════════════

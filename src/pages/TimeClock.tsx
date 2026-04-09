@@ -29,7 +29,6 @@ import {
   Timestamp
 } from 'firebase/firestore';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Button } from '@/src/components/ui/Button';
@@ -225,7 +224,7 @@ export function TimeClock() {
       <Card className="overflow-hidden border-none shadow-xl">
         <div className="bg-blue-600 p-8 text-white text-center space-y-2">
           <p className="text-blue-100 font-medium uppercase tracking-wider text-sm">
-            {format(currentTime, "EEEE, dd 'de' MMMM", { locale: ptBR })}
+            {format(currentTime, "EEEE, dd 'de' MMMM")}
           </p>
           <h2 className="text-6xl font-bold tracking-tighter">
             {format(currentTime, "HH:mm:ss")}
@@ -451,7 +450,7 @@ export function TimeClock() {
                     {lastLog.type === 'in' ? 'Entrada' : 'Saída'}
                   </span>
                   <span className="text-sm text-slate-500 dark:text-slate-400">
-                    {format(new Date(lastLog.timestamp), "HH:mm 'em' dd/MM", { locale: ptBR })}
+                    {format(new Date(lastLog.timestamp), "HH:mm 'em' dd/MM")}
                   </span>
                 </div>
               </div>

@@ -11,8 +11,8 @@ import { Input } from '@/src/components/ui/Input';
 import { handleFirestoreError, OperationType } from '@/src/lib/firestore-utils';
 import { Ausencia, AusenciaStatus, AusenciaTipo, UserProfile, QuadroHorario, DiaSemana } from '@/src/types';
 import { Plus, Search, Edit2, Trash2, X, AlertCircle, FileText, CheckCircle2, Clock, Link, GitMerge } from 'lucide-react';
-import { format, parseISO, startOfMonth, endOfMonth, getDay } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth, getDay } from 'date-fns';
+import { parseISO } from 'date-fns/parseISO';
 
 const TIPO_LABELS: Record<AusenciaTipo, string> = {
   falta: 'Falta', atestado: 'Atestado', licenca: 'Licença', suspensao: 'Suspensão', outro: 'Outro',
@@ -297,7 +297,7 @@ export function AdminAusencias() {
                     <tr key={a.id} className="border-b border-slate-100 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50">
                       <td className="py-2 px-3 font-medium text-slate-900 dark:text-slate-100 whitespace-nowrap">{a.userName}</td>
                       <td className="py-2 px-3 text-slate-600 dark:text-slate-400 whitespace-nowrap">
-                        {format(parseISO(a.data), 'dd/MM/yyyy', { locale: ptBR })}
+                        {format(parseISO(a.data), 'dd/MM/yyyy')}
                       </td>
                       <td className="py-2 px-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${TIPO_COLORS[a.tipo]}`}>{TIPO_LABELS[a.tipo]}</span>
@@ -417,7 +417,7 @@ export function AdminAusencias() {
                 <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">Vincular ao Quadro de Horários</h2>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
                   Substituto: <span className="font-medium text-slate-700 dark:text-slate-300">{vinculoAusencia.substitutoNome}</span>
-                  {' · '}Data: {format(parseISO(vinculoAusencia.data), 'dd/MM/yyyy', { locale: ptBR })}
+                  {' · '}Data: {format(parseISO(vinculoAusencia.data), 'dd/MM/yyyy')}
                 </p>
               </div>
               <button onClick={() => setVinculoAusencia(null)} className="text-slate-400 hover:text-slate-600"><X size={20} /></button>

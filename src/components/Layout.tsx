@@ -5,11 +5,9 @@ import {
   Clock, 
   Users, 
   FileText, 
-  Settings, 
   LogOut, 
   Menu, 
   X,
-  Palette,
   Bell,
   BellRing,
   Sun,
@@ -66,7 +64,6 @@ export function Layout({ children }: LayoutProps) {
     { label: 'Horários de Aula', icon: AlarmClock, path: '/horarios', roles: ['admin'] },
     { label: 'Terminal de Ponto', icon: Tv2, path: '/terminal', roles: ['admin'] },
     { label: 'Ausências', icon: UserX, path: '/ausencias', roles: ['admin'] },
-    { label: 'Identidade Visual', icon: Palette, path: '/identidade', roles: ['admin'] },
     { label: 'Rede de Escolas', icon: Globe, path: '/rede', roles: ['superadmin'] },
   ];
 

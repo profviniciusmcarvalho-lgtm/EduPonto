@@ -7,8 +7,8 @@ import {
   onSnapshot,
   Timestamp
 } from 'firebase/firestore';
-import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { parseISO } from 'date-fns/parseISO';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';

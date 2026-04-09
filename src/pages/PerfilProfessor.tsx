@@ -6,7 +6,6 @@ import {
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { format } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
 import { db, storage } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
@@ -304,7 +303,7 @@ export function PerfilProfessor() {
             <div className="flex justify-between">
               <span className="text-slate-500 dark:text-slate-400">Membro desde</span>
               <span className="font-medium text-slate-900 dark:text-slate-100">
-                {format(new Date(targetProfile.createdAt), 'dd/MM/yyyy', { locale: ptBR })}
+                {format(new Date(targetProfile.createdAt), 'dd/MM/yyyy')}
               </span>
             </div>
           </CardContent>
@@ -372,7 +371,7 @@ export function PerfilProfessor() {
                     <p className="text-xs text-slate-500 dark:text-slate-400">{log.device}</p>
                   </div>
                   <span className="text-sm text-slate-600 dark:text-slate-400 font-mono">
-                    {format(new Date(log.timestamp), "dd/MM/yyyy HH:mm", { locale: ptBR })}
+                    {format(new Date(log.timestamp), "dd/MM/yyyy HH:mm")}
                   </span>
                 </div>
               ))}

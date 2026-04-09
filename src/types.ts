@@ -20,6 +20,8 @@ export interface UserProfile {
   endTime?: string;   // e.g., "17:00"
   /** Weekly class periods (professors only) */
   numeroAulas?: number;
+  /** Disciplines taught by the professor, each with weekly period count */
+  disciplinasMinistradas?: Array<{ disciplinaId: string; disciplinaNome: string; numeroAulas: number }>;
   /** Employee registration number used for kiosk punch terminal */
   matricula?: string;
   /** CPF stored as digits only (e.g., "12345678901") used for kiosk lookup */

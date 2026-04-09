@@ -4,10 +4,11 @@ import {
   addDoc, doc, updateDoc, deleteDoc,
 } from 'firebase/firestore';
 import {
-  format, startOfMonth, endOfMonth, eachDayOfInterval,
-  isSameDay, parseISO, addMonths, subMonths, getDay,
+  format, startOfMonth, endOfMonth,
+  isSameDay, addMonths, subMonths, getDay,
 } from 'date-fns';
-import { ptBR } from 'date-fns/locale';
+import { parseISO } from 'date-fns/parseISO';
+import { eachDayOfInterval } from 'date-fns/eachDayOfInterval';
 import { db } from '@/src/lib/firebase';
 import { useAuth } from '@/src/hooks/useAuth';
 import { Card, CardHeader, CardTitle, CardContent } from '@/src/components/ui/Card';
@@ -155,7 +156,7 @@ export function AdminCalendario() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <CardTitle className="text-lg capitalize">
-                {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+                {format(currentMonth, 'MMMM yyyy')}
               </CardTitle>
               <div className="flex items-center gap-1">
                 <button
@@ -268,8 +269,8 @@ export function AdminCalendario() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-slate-900 dark:text-slate-100 truncate">{evt.nome}</p>
                       <p className="text-xs text-slate-500 dark:text-slate-400">
-                        {format(parseISO(evt.data), 'dd/MM/yyyy', { locale: ptBR })}
-                        {evt.dataFim && ` → ${format(parseISO(evt.dataFim), 'dd/MM/yyyy', { locale: ptBR })}`}
+                        {format(parseISO(evt.data), 'dd/MM/yyyy')}
+                        {evt.dataFim && ` → ${format(parseISO(evt.dataFim), 'dd/MM/yyyy')}`}
                       </p>
                       <div className="flex items-center gap-2 mt-1">
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${TIPO_COLORS[evt.tipo].bg} ${TIPO_COLORS[evt.tipo].text}`}>

@@ -21,6 +21,7 @@ export interface UserProfile {
   permissions?: UserPermissions;
   fcmTokens?: string[];
   scheduleId?: string;
+  subject?: string; // Disciplina ministrada (apenas professores)
 }
 
 export interface TimeLog {
@@ -64,4 +65,7 @@ export interface Schedule {
   lunchEnd?: string;
   workload: number;
   createdAt: string;
+  professorId?: string;
+  professorName?: string;
+  subject?: string; // Disciplina associada
 }
